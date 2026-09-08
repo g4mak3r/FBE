@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>FBE {{ fbe_version }}</title>
+  <link rel="icon" href="/static/icons/favicon.ico?b={{ fbe_build_id }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png?b={{ fbe_build_id }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/fbe-icon-180.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/fbe-icon-192.png?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/style.css?b={{ fbe_build_id }}">
+</head>
+<body data-open-supply="{{ open_supply }}" data-fbs-sync-pending="{{ '1' if fbs_sync_pending else '0' }}">
+{% set active_nav = "wb" %}
+{% set local_tabs = true %}
+{% include "partials/sidebar.html" %}
+<div class="workspace-heading" id="workspace-title" tabindex="-1"><h1>Заказы и поставки</h1></div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+{% if catalog_error %}<div class="banner warn">Каталог: {{ catalog_error }}</div>{% endif %}
+{% if catalog_warnings %}<div class="banner warn">Предупреждения каталога:<br>{% for w in catalog_warnings %}{{ w }}<br>{% endfor %}</div>{% endif %}
+{% if config.mock_mode %}<div class="banner warn">DEMO MODE - синтетические данные, внешние API отключены.</div>{% endif %}
+{% if config.dry_run_print %}<div class="banner warn">Тестовая печать (dry-run) - задания не отправляются на принтер.</div>{% endif %}
+{% set has_active_supplies = active_supplies|length > 0 %}
+
+<div class="tab-slider">
+  <div id="tab-track" class="tab-track">
+    <main id="wb-panel" class="tab-panel dashboard-grid">
+      <section class="card dashboard-card orders-panel">
+        <div class="section-head compact-head orders-title-head">
+          <div class="orders-title-row">
+            <h2>1. Новые заказы</h2>
+            <div class="big-counter" title="Новые заказы">{{ new_orders|length }}</div>
+            <a class="refresh-counter" href="/?refresh=1#wb" title="Обновить новые заказы WB">↻</a>
+            <form method="post" action="/supplies/create-by-warehouses" class="warehouse-auto-supply-form" onsubmit="return confirm('Создать отдельную поставку для каждого FBS-склада и распределить все новые задания?');">
+              <button type="submit" class="warehouse-auto-supply-button" {% if not new_orders %}disabled{% endif %}>Создать поставки по складам</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="orders-helper-line">Отметьте нужные заказы галочками — снизу появится панель добавления в поставку.</div>
+
+        <div id="order-action-panel" class="order-action-panel bottom-order-popup" role="dialog" aria-live="polite" aria-label="Добавление выбранных заказов в поставку" hidden>
+          <div class="order-action-head">
+            <div>
+              <div class="order-action-title">Выбрано заказов: <span id="selected-orders-count">0</span></div>
+              <div class="hint">Следующий шаг — добавить их в текущую поставку или сразу создать новую.</div>
+            </div>
+            <button type="button" class="secondary small-button" data-close-order-actions>Закрыть</button>
+          </div>
+
+<div class="order-action-grid">
+            <form method="post" action="/supplies/add-orders" id="add-to-existing-supply-form" class="order-action-box">
+              <label class="field-block">
+                <span>Текущая поставка</span>
+                <select name="supply_id" {% if has_active_supplies %}required{% else %}disabled{% endif %}>
+                  {% if has_active_supplies %}
+                    <option value="">Выбрать поставку на сборке</option>
+                    {% for s in active_supplies %}
+                      <option value="{{ s.id }}">{{ s.name or s.id }}</option>
+                    {% endfor %}
+                  {% else %}
+                    <option value="">Активных поставок на сборке нет</option>
+                  {% endif %}
+                </select>
+              </label>
+              <div data-order-hidden-target="existing"></div>
+              <button type="submit" class="{{ 'primary' if has_active_supplies else 'secondary' }}" {% if not has_active_supplies %}disabled title="Нет активной поставки на сборке"{% endif %}>Добавить в поставку</button>
+            </form>
+
+            <form method="post" action="/supplies/create-and-add" id="create-and-add-supply-form" class="order-action-box">
+              <label class="field-block">
+                <span>Название новой поставки</span>
+                <input name="name" value="{{ suggested_supply_name }}" title="Можно оставить это имя или заменить вручную">
+                <input type="hidden" name="auto_name_suggested" value="{{ suggested_supply_name }}">
+              </label>
+              <div data-order-hidden-target="create"></div>
+              <button type="submit" class="{{ 'secondary create-and-add-button' if has_active_supplies else 'primary create-and-add-button-main' }}">Создать новую поставку и добавить</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="table-scroll table-scroll-orders">
+          <table id="new-orders-table" class="sortable-orders sortable-table compact-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" class="select-all" data-target="new-orders-table"></th>
+                <th class="sortable" data-key="age" data-type="number" data-default-dir="desc">Таймер</th>
+                <th class="sortable" data-key="warehouse" data-type="text">Склад</th>
+                <th class="sortable" data-key="name" data-type="text">Наименование</th>
+                <th class="sortable" data-key="article" data-type="text">Артикул продавца</th>
+                <th class="sortable" data-key="order" data-type="number">Заказ</th>
+                <th class="sortable" data-key="created" data-type="date">Дата заказа</th>
+                <th class="sortable" data-key="kiz" data-type="text">КИЗ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in new_orders %}
+              <tr class="{{ 'good' if o.excel_found else 'bad' }}"
+                  data-age="{{ o.age_minutes }}"
+                  data-created="{{ o.created_at }}"
+                  data-warehouse="{{ o.warehouse_name }}"
+                  data-name="{{ o.name if o.excel_found else 'Не найдено в каталоге' }}"
+                  data-article="{{ o.seller_article }}"
+                  data-order="{{ o.id }}"
+                  data-kiz="{{ o.kiz_label }}">
+                <td><input type="checkbox" name="order_ids" value="{{ o.id }}" data-new-order-checkbox></td>
+                <td><span class="timer {{ o.timer_class }}">{{ o.age_text }}</span></td>
+                <td><span class="warehouse-badge" title="warehouseId {{ o.warehouse_id or '—' }}">{{ o.warehouse_name }}</span></td>
+                <td class="name-cell">{{ o.name if o.excel_found else 'Не найдено в каталоге' }}</td>
+                <td><code>{{ o.seller_article }}</code></td>
+                <td>{{ o.id }}</td>
+                <td>{{ o.created_at_text }}</td>
+                <td>{% if o.kiz_label %}<span class="badge {{ o.kiz_class }}" title="{{ o.kiz_raw }}">{{ o.kiz_label }}</span>{% endif %}</td>
+              </tr>
+              {% else %}
+              <tr><td colspan="8" class="muted">Новых заказов нет</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card dashboard-card supplies-panel">
+        <div class="section-head compact-head supplies-main-head">
+          <h2>2. Поставки</h2>
+          <div class="supplies-head-actions">
+            <button type="button" class="transfer-supplies-button" data-transfer-supplies-open {% if not active_dashboard_supplies %}disabled{% endif %}>Передать поставки</button>
+            <a class="marking-global-button cz-main-button" href="/marking">Честный Знак</a>
+          </div>
+        </div>
+
+        {% if fbs_sync_pending %}
+        <div class="supply-sync-notice" data-fbs-sync-notice>
+          <span class="supply-sync-spinner" aria-hidden="true"></span>
+          <span>Получаю актуальное состояние поставок WB. Старые локальные данные временно скрыты.</span>
+        </div>
+        {% endif %}
+
+        <div class="supply-view-switcher" role="tablist" aria-label="Поставки">
+          <button type="button" class="supply-view-tab active supply-tab-assembly" data-supply-view="assembly" role="tab" aria-selected="true">На сборке <span>{{ active_dashboard_supplies|length }}</span></button>
+          <button type="button" class="supply-view-tab supply-tab-wb" data-supply-view="wb" role="tab" aria-selected="false">Передано WB <span>{{ transferred_dashboard_supplies|length }}</span></button>
+          <button type="button" class="supply-view-tab supply-tab-delivered" data-supply-view="delivered" role="tab" aria-selected="false">Доставлено <span>{{ delivered_count }} поз.</span></button>
+        </div>
+
+        <div class="supply-view-panel active" data-supply-view-panel="assembly">
+          <form method="post" action="/supplies/create" class="create-supply-form compact-create-supply-form">
+            <input name="name" placeholder="{{ suggested_supply_name }}" title="Оставьте пустым для автогенерации названия">
+            <button type="submit">Создать</button>
+          </form>
+
+          <div class="table-scroll table-scroll-supplies">
+            <table id="active-supplies-table" class="sortable-table compact-table supplies-table">
+              <thead><tr><th><input type="checkbox" data-transfer-select-all aria-label="Выбрать все поставки на сборке"></th><th>Статус</th><th>Название</th><th>Товаров</th><th>Создана</th></tr></thead>
+              <tbody>
+                {% for s in active_dashboard_supplies %}
+                <tr data-status="0" data-name="{{ s.name or '' }} {{ s.id or '' }}" data-count="{{ s.order_count_sort }}" data-created="{{ s.createdAt or '' }}">
+                  <td><input type="checkbox" value="{{ s.id }}" data-transfer-supply-checkbox aria-label="Выбрать поставку {{ s.name or s.id }}"></td>
+                  <td><span class="badge status-assembling">На сборке</span></td>
+                  <td class="supply-title-cell"><a class="supply-open-link" href="/supplies/{{ s.id }}" data-supply-id="{{ s.id }}"><div class="strong-line">{{ s.name or 'Без названия' }}</div><div class="muted small"><code>{{ s.id }}</code></div></a></td>
+                  <td><span class="count-pill">{{ s.order_count }}</span></td>
+                  <td>{{ s.created_at_text or '—' }}</td>
+                </tr>
+                {% else %}<tr><td colspan="5" class="muted">{{ 'Синхронизация с WB…' if fbs_sync_pending else 'Сейчас ничего не собирается' }}</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="supply-view-panel" data-supply-view-panel="wb" hidden>
+          <div class="table-scroll table-scroll-supplies">
+            <table class="sortable-table compact-table supplies-table">
+              <thead><tr><th>Статус</th><th>Название</th><th>Товаров</th><th>Создана</th></tr></thead>
+              <tbody>
+                {% for s in transferred_dashboard_supplies %}
+                <tr>
+                  <td><span class="badge status-transferred">Передано WB</span></td>
+                  <td class="supply-title-cell"><a class="supply-open-link" href="/supplies/{{ s.id }}" data-supply-id="{{ s.id }}"><div class="strong-line">{{ s.name or 'Без названия' }}</div><div class="muted small"><code>{{ s.id }}</code></div></a></td>
+                  <td><span class="count-pill">{{ s.order_count }}</span></td>
+                  <td>{{ s.created_at_text or '—' }}</td>
+                </tr>
+                {% else %}<tr><td colspan="4" class="muted">{{ 'Синхронизация с WB…' if fbs_sync_pending else 'Нет поставок в доставке WB' }}</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="supply-view-panel" data-supply-view-panel="delivered" hidden>
+          <div class="delivered-summary">
+            <div class="delivered-metric"><span>Завершено</span><strong>{{ delivered_count }}</strong></div>
+            <div class="delivered-metric ok"><span>Выкуплено</span><strong>{{ delivered_sold_count }}</strong></div>
+            <div class="delivered-metric muted"><span>Отказы / отмены</span><strong>{{ delivered_canceled_count }}</strong></div>
+            <a href="/marking/post-sale?date_from={{ history_start }}" class="button-link lifecycle-open-button">Открыть вывод КИЗ</a>
+          </div>
+          <div class="hint delivered-hint">Показаны сборочные задания за доступный онлайн-период WB. Для вывода КИЗ используйте отдельный реестр.</div>
+        </div>
+      </section>
+
+      <div id="transfer-supplies-modal" class="supply-tool-modal transfer-supplies-modal" hidden>
+        <div class="supply-tool-modal-backdrop" data-transfer-supplies-close></div>
+        <div class="supply-tool-modal-card transfer-supplies-card" role="dialog" aria-modal="true" aria-labelledby="transfer-supplies-title">
+          <div class="supply-tool-modal-head">
+            <div>
+              <h3 id="transfer-supplies-title">Передать поставки WB</h3>
+              <div class="hint">Проверка WB → грузоместа → QR грузомест → передача → QR поставки.</div>
+            </div>
+            <button type="button" class="secondary small-button" data-transfer-supplies-close>Закрыть</button>
+          </div>
+
+          <div class="transfer-stage transfer-stage-active" data-transfer-stage="preflight">
+            <div class="transfer-stage-title"><span>1</span><div><b>Проверить готовность</b><small>FBE сверит статусы, обязательные сроки годности и КИЗы непосредственно с WB.</small></div></div>
+            <div class="transfer-selected-summary" data-transfer-selected-summary></div>
+            <label class="transfer-confirm-row"><input type="checkbox" data-transfer-confirm-assembled> <span>Подтверждаю: выбранные поставки физически собраны и готовы к передаче.</span></label>
+            <button type="button" class="primary" data-transfer-preflight>Проверить выбранные поставки</button>
+            <div class="transfer-results" data-transfer-preflight-results></div>
+          </div>
+
+          <div class="transfer-stage" data-transfer-stage="cargo" hidden>
+            <div class="transfer-stage-title"><span>2</span><div><b>Указать грузоместа</b><small>Для каждой поставки задайте итоговое количество транспортировочных грузомест.</small></div></div>
+            <div class="transfer-cargo-grid" data-transfer-cargo-grid></div>
+            <button type="button" class="primary" data-transfer-create-cargo>Получить и сохранить QR грузомест</button>
+            <div class="transfer-results" data-transfer-cargo-results></div>
+          </div>
+
+          <div class="transfer-stage" data-transfer-stage="deliver" hidden>
+            <div class="transfer-stage-title"><span>3</span><div><b>Передать поставки</b><small>QR грузомест уже сохранены FBE локально. После передачи состав поставки менять нельзя.</small></div></div>
+            <label class="transfer-confirm-row"><input type="checkbox" data-transfer-confirm-labels> <span>QR грузомест распечатаны и наклеены на правильные грузоместа.</span></label>
+            <button type="button" class="primary wb-purple-action" data-transfer-deliver>Передать поставки WB</button>
+            <div class="transfer-results" data-transfer-deliver-results></div>
+          </div>
+
+          <div class="transfer-stage" data-transfer-stage="supply-qr" hidden>
+            <div class="transfer-stage-title"><span>4</span><div><b>Получить QR поставок</b><small>После передачи FBE получает финальный QR каждой поставки и сохраняет локальную копию.</small></div></div>
+            <button type="button" class="primary wb-purple-action" data-transfer-supply-qr>Получить QR-коды поставок</button>
+            <div class="transfer-results" data-transfer-supply-qr-results></div>
+          </div>
+        </div>
+      </div>
+
+      <section id="inline-supply-panel" class="inline-supply-panel" aria-live="polite"></section>
+    </main>
+
+    <section id="manual-panel" class="tab-panel manual-panel-inline">
+      <div class="manual-print-head">
+        <h2>Печать маленьких этикеток</h2>
+        <div class="hint">Переходники и именные этикетки печатаются из отдельных справочников.</div>
+      </div>
+      {% include "partials/print_state.html" %}
+      <div class="manual-print-cards dashboard-manual-cards">
+        <section class="card manual-print-card transition-card">
+          <div class="manual-card-badge">1</div>
+          <div class="section-head compact-head"><div><h2>Печать переходников</h2><div class="hint">Список ароматов из <code>samples</code>.</div></div></div>
+          <form method="post" class="manual-grid manual-grid-single">
+            <input type="hidden" name="label_type" value="samples">
+            <label class="field-block"><span>Аромат</span><select name="aroma" required>{% for aroma in sample_aromas %}<option value="{{ aroma }}">{{ aroma }}</option>{% endfor %}</select></label>
+            <label class="field-block short-field"><span>Количество</span><input name="quantity" type="number" min="1" max="99" value="1" required></label>
+            <input type="hidden" name="volume" value="">
+            <div class="manual-actions"><button type="submit" formaction="/manual-print/direct" class="primary confirm-small-roll">Отправить на печать</button></div>
+          </form>
+        </section>
+        <section class="card manual-print-card name-card">
+          <div class="manual-card-badge">2</div>
+          <div class="section-head compact-head"><div><h2>Печать именных этикеток</h2><div class="hint">Аромат из <code>names</code>, формат из <code>formats</code>.</div></div></div>
+          <form method="post" class="manual-grid">
+            <input type="hidden" name="label_type" value="names">
+            <label class="field-block"><span>Аромат</span><select name="aroma" required>{% for aroma in name_aromas %}<option value="{{ aroma }}">{{ aroma }}</option>{% endfor %}</select></label>
+            <label class="field-block"><span>Формат</span><select name="volume" required>{% for volume in volumes %}<option value="{{ volume }}" {% if volume == default_volume %}selected{% endif %}>{{ volume }}</option>{% endfor %}</select></label>
+            <label class="field-block short-field"><span>Количество</span><input name="quantity" type="number" min="1" max="99" value="1" required></label>
+            <div class="manual-actions"><button type="submit" formaction="/manual-print/direct" class="primary confirm-small-roll">Отправить на печать</button></div>
+          </form>
+        </section>
+      </div>
+    </section>
+
+
+  </div>
+</div>
+
+<script src="/static/app.js?b={{ fbe_build_id }}"></script>
+<script src="/static/connections.js?b={{ fbe_build_id }}"></script>
+</body>
+</html>

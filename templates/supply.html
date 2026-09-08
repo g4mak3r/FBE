@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>FBE {{ fbe_version }} — {{ supply_id }}</title>
+  <link rel="icon" href="/static/icons/favicon.ico?b={{ fbe_build_id }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png?b={{ fbe_build_id }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/fbe-icon-180.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/fbe-icon-192.png?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/style.css?b={{ fbe_build_id }}">
+</head>
+<body>
+{% set active_nav = "wb" %}
+{% set local_tabs = false %}
+{% include "partials/sidebar.html" %}
+<div class="workspace-heading" id="workspace-title" tabindex="-1"><h1>Поставка</h1><span class="muted">{{ supply_id }}</span></div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+{% if config.mock_mode %}<div class="banner warn">DEMO MODE - синтетические данные, внешние API отключены.</div>{% endif %}
+{% if config.dry_run_print %}<div class="banner warn">Тестовая печать (dry-run) - задания не отправляются на принтер.</div>{% endif %}
+
+<section class="card compact supply-hero">
+  <div class="section-head">
+    <div>
+      <h2>{{ supply.name or 'Поставка' }} <code>{{ supply_id }}</code></h2>
+      <div class="hint">
+        <span class="badge {{ supply.fbe_status_class }}">{{ supply.fbe_status or 'Статус неизвестен' }}</span>
+        {% if supply.created_at_text %}Создана: {{ supply.created_at_text }}{% endif %}
+        {% if supply.transfer_or_scan_text %} · Передана/скан: {{ supply.transfer_or_scan_text }}{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="supply-command-row" aria-label="Основные действия поставки">
+    <button type="button" class="supply-tool-button tool-print" data-modal-open="#supply-print-modal-{{ supply_id }}">Печать заказов</button>
+    <button type="button" class="supply-tool-button tool-expiry" data-modal-open="#supply-expiration-modal-{{ supply_id }}">Сроки годности</button>
+    <button type="button" class="supply-tool-button tool-marking" data-modal-open="#supply-marking-modal-{{ supply_id }}">Честный Знак</button>
+    <button type="button" class="supply-tool-button tool-needs" data-needs-table="#supply-orders-table" data-needs-subtitle="Поставка {{ supply_id }}">Учет</button>
+  </div>
+</section>
+
+<div id="supply-print-modal-{{ supply_id }}" class="supply-tool-modal" hidden>
+  <div class="supply-tool-modal-backdrop" data-modal-close></div>
+  <div class="supply-tool-modal-card" role="dialog" aria-modal="true" aria-label="Печать заказов">
+    <div class="supply-tool-modal-head">
+      <h3>Печать заказов</h3>
+      <button type="button" class="secondary small-button" data-modal-close>Назад</button>
+    </div>
+    <form method="post" action="/supplies/{{ supply_id }}/original-wb-final-pdf" enctype="multipart/form-data" class="portal-upload-form modal-print-form" target="_blank">
+      <label class="file-pill">
+        <span>PDF с QR-кодами WB</span>
+        <input type="file" name="wb_pdf" accept="application/pdf,.pdf" required>
+      </label>
+      <label class="file-pill">
+        <span>Лист подбора Excel</span>
+        <input type="file" name="picklist_excel" accept=".xlsx,.xlsm,.xls" required>
+      </label>
+      <div class="modal-actions-row">
+        <button type="button" class="secondary" data-modal-close>Назад</button>
+        <button type="submit" class="primary wb-purple-action">PDF-лента: QR-коды + этикетки</button>
+      </div>
+    </form>
+    <details class="reserve-api-action modal-reserve-api">
+      <summary>Резерв через API WB</summary>
+      <form method="post" action="/supplies/{{ supply_id }}/auto-final-pdf-all" target="_blank">
+        <button type="submit" class="secondary">Собрать PDF через API WB</button>
+      </form>
+    </details>
+  </div>
+</div>
+
+<div id="supply-expiration-modal-{{ supply_id }}" class="supply-tool-modal" hidden>
+  <div class="supply-tool-modal-backdrop" data-modal-close></div>
+  <div class="supply-tool-modal-card compact-modal-card" role="dialog" aria-modal="true" aria-label="Сроки годности">
+    <div class="supply-tool-modal-head">
+      <h3>Сроки годности</h3>
+      <button type="button" class="secondary small-button" data-modal-close>Назад</button>
+    </div>
+    <form method="post" action="/supplies/{{ supply_id }}/set-expiration" class="expiration-form modal-expiration-form">
+      <label class="field-block expiration-field">
+        <span>Срок годности для всей поставки</span>
+        <input name="expiration" value="{{ default_expiration }}" placeholder="14.06.2028" inputmode="numeric" required>
+      </label>
+      <div class="modal-actions-row">
+        <button type="button" class="secondary" data-modal-close>Назад</button>
+        <button type="submit" class="expiry-action">Указать сроки годности</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="supply-marking-modal-{{ supply_id }}" class="supply-tool-modal" hidden>
+  <div class="supply-tool-modal-backdrop" data-modal-close></div>
+  <div class="supply-tool-modal-card compact-modal-card" role="dialog" aria-modal="true" aria-label="Честный Знак">
+    <div class="supply-tool-modal-head">
+      <h3>Честный Знак</h3>
+      <button type="button" class="secondary small-button" data-modal-close>Назад</button>
+    </div>
+    <div class="banner warn">Раздел для кодов маркировки подготовлен как следующий этап. Сейчас кнопка не отправляет данные в WB.</div>
+    <div class="modal-actions-row">
+      <button type="button" class="secondary" data-modal-close>Назад</button>
+    </div>
+  </div>
+</div>
+
+<section class="card">
+  <div class="section-head">
+    <h2>Задания в поставке</h2>
+  </div>
+
+  <form method="post" id="selected-actions-form">
+    <div class="table-scroll table-scroll-supply-orders">
+      <table id="supply-orders-table" class="sortable-orders sortable-table compact-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" class="select-all" data-target="supply-orders-table"></th>
+            <th class="sortable" data-key="age" data-type="number" data-default-dir="desc">Таймер</th>
+            <th class="sortable" data-key="name" data-type="text">Наименование</th>
+            <th class="sortable" data-key="article" data-type="text">Артикул продавца</th>
+            <th class="sortable" data-key="sticker_num" data-type="number">Сборочное задание</th>
+            <th class="sortable" data-key="created" data-type="date">Дата заказа</th>
+            <th class="sortable" data-key="kiz" data-type="text">КИЗ</th>
+            <th class="sortable" data-key="sticker" data-type="text">WB-стикер</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+          {% set ready = o.excel_found and o.wb_sticker_ready %}
+          <tr class="{{ 'good' if ready else ('warn-row' if o.excel_found else 'bad') }}"
+              data-age="{{ o.age_minutes }}"
+              data-created="{{ o.created_at }}"
+              data-name="{{ o.name if o.excel_found else 'Не найдено в каталоге' }}"
+              data-article="{{ o.seller_article }}"
+              data-order="{{ o.id }}"
+              data-sticker_num="{{ o.sticker_sort }}"
+              data-kiz="{{ o.kiz_label }}"
+              data-sticker="{{ 'Готов' if o.wb_sticker_ready else 'Не скачан' }}">
+            <td><input type="checkbox" name="order_ids" value="{{ o.id }}" data-supply-order-checkbox></td>
+            <td><span class="timer {{ o.timer_class }}">{{ o.age_text }}</span></td>
+            <td class="name-cell">{{ o.name if o.excel_found else 'Не найдено в каталоге' }}</td>
+            <td><code>{{ o.seller_article }}</code></td>
+            <td class="sticker-number-cell" title="orderId: {{ o.id }}{% if o.sticker_barcode %} · barcode: {{ o.sticker_barcode }}{% endif %}">
+              {% if o.sticker_part_a or o.sticker_part_b %}
+                <span>{{ o.sticker_part_a }}</span> <b>{{ o.sticker_part_b }}</b>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td>{{ o.created_at_text }}</td>
+            <td>{% if o.kiz_label %}<span class="badge {{ o.kiz_class }}" title="{{ o.kiz_raw }}">{{ o.kiz_label }}</span>{% endif %}</td>
+            <td>{{ 'Готов' if o.wb_sticker_ready else 'Не скачан' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="muted">В поставке нет заданий или не удалось получить детали</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+
+  <div id="supply-selected-panel-{{ supply_id }}" class="supply-selected-panel bottom-order-popup" data-supply-id="{{ supply_id }}" data-source-table="#supply-orders-table" role="dialog" aria-live="polite" aria-label="Действия с выбранными заданиями поставки" hidden>
+    <div class="order-action-head">
+      <div>
+        <div class="order-action-title">Выбрано заданий: <span data-supply-selected-count>0</span></div>
+        <div class="hint">Действия применятся только к отмеченным строкам этой поставки.</div>
+      </div>
+      <button type="button" class="secondary small-button" data-close-supply-actions>Закрыть</button>
+    </div>
+
+    <div class="supply-selected-buttons-row single-action-row">
+      <form method="post" action="/supplies/{{ supply_id }}/print-internal" class="supply-selected-action-form">
+        <div data-supply-hidden-target="labels-{{ supply_id }}"></div>
+        <button type="submit" class="primary small-selected-action">Печать этикетки</button>
+      </form>
+    </div>
+
+    <form method="post" action="/supplies/{{ supply_id }}/move-orders" class="supply-move-form">
+      <label class="field-block supply-move-select">
+        <span>Перенести в поставку</span>
+        <select name="target_supply_id" required>
+          <option value="">Выбрать другую активную поставку</option>
+          {% for s in active_supplies %}
+            {% if s.id != supply_id %}
+              <option value="{{ s.id }}">{{ s.name or s.id }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </label>
+      <div data-supply-hidden-target="move-{{ supply_id }}"></div>
+      <button type="submit" class="secondary move-selected-action">Перенести выбранные в другую поставку</button>
+    </form>
+  </div>
+
+</section>
+<script src="/static/app.js?b={{ fbe_build_id }}"></script>
+<script src="/static/connections.js?b={{ fbe_build_id }}"></script>
+</body>
+</html>

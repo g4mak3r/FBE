@@ -1,0 +1,18 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+requests==2.32.3
+# Requests 2.32.x supports chardet < 6; some 2026 transitive deps install chardet 7.x.
+chardet==5.2.0
+openpyxl==3.1.5
+jinja2==3.1.4
+python-multipart==0.0.19
+# Windows only, needed for raw ZPL printing:
+pywin32==308; platform_system == "Windows"
+python-dotenv==1.0.1
+pillow==10.4.0
+reportlab==4.2.2
+
+pypdf==5.1.0
+
+# Needed for high-quality vector WB sticker PDF generation (SVG → PDF):
+svglib==1.5.1

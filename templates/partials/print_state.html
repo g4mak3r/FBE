@@ -1,0 +1,5 @@
+<div class="print-state" role="status">
+  <strong>{% if config.mock_mode %}DEMO · только тестовая печать{% elif config.dry_run_print %}REAL · тестовая печать (dry-run){% else %}REAL · отправка на принтер{% endif %}</strong>
+  <span>Принтер: <b>{{ config.small_label_printer_name or 'Не настроен' }}</b></span>
+  <span>{% if config.mock_mode or config.dry_run_print %}Физическая печать отключена{% else %}Перед печатью проверьте рулон и количество{% endif %}</span>
+</div>

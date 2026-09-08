@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Каталог товаров · FBE {{ fbe_version }}</title>
+  <link rel="icon" href="/static/icons/favicon.ico?b={{ fbe_build_id }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png?b={{ fbe_build_id }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/fbe-icon-180.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/fbe-icon-192.png?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/style.css?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/catalog.css?b={{ fbe_build_id }}">
+</head>
+<body class="catalog-body">
+{% set active_nav = "catalog" %}
+{% set local_tabs = false %}
+{% include "partials/sidebar.html" %}
+<div class="workspace-heading" id="workspace-title" tabindex="-1"><h1>Каталог</h1></div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+{% if config.mock_mode %}<div class="banner warn">DEMO MODE - синтетические данные, внешние API отключены.</div>{% endif %}
+
+<main class="catalog-page">
+  <section class="catalog-hero card">
+    <div>
+      <div class="eyebrow">Единый источник данных</div>
+      <h2>Товары и маркировочные данные</h2>
+      <p>Профиль маркировки является источником КИЗ. ТН ВЭД и документ соответствия из каталога автоматически используются в блоке Честного Знака.</p>
+    </div>
+    <div class="catalog-actions">
+      <button type="button" class="primary" data-new-product>+ Добавить товар</button>
+      <a class="button-link success" href="/catalog/export.xlsx">Скачать каталог XLSX</a>
+      <a class="button-link secondary" href="/catalog/template.xlsx">Скачать шаблон XLSX</a>
+      <button type="button" class="secondary" data-backup-db>Скачать резервную копию</button>
+    </div>
+  </section>
+
+  <section class="catalog-stats">
+    <article class="stat-card"><span>Всего</span><strong>{{ stats.total }}</strong></article>
+    <article class="stat-card"><span>Активных</span><strong>{{ stats.active }}</strong></article>
+    <article class="stat-card"><span>С КИЗ</span><strong>{{ stats.marked }}</strong></article>
+    <article class="stat-card {{ 'danger' if stats.missing_gtin else '' }}"><span>КИЗ без GTIN</span><strong>{{ stats.missing_gtin }}</strong></article>
+    <article class="stat-card {{ 'warn' if stats.incomplete_compliance else '' }}"><span>Не заполнено соответствие</span><strong>{{ stats.incomplete_compliance }}</strong></article>
+    <article class="stat-card"><span>Переходники</span><strong>{{ stats.samples }}</strong></article>
+    <article class="stat-card"><span>Именные ароматы</span><strong>{{ stats.names }}</strong></article>
+    <article class="stat-card"><span>Форматы этикеток</span><strong>{{ stats.name_formats }}</strong></article>
+  </section>
+
+  <section class="card catalog-controls">
+    <form method="get" action="/catalog" class="catalog-filter-form">
+      <label>
+        <span>Поиск</span>
+        <input name="q" value="{{ filters.q }}" placeholder="Артикул, название, GTIN, декларация">
+      </label>
+      <label>
+        <span>Категория</span>
+        <select name="category">
+          <option value="">Все категории</option>
+          {% for item in result.categories %}
+          <option value="{{ item }}" {% if filters.category == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>Маркировка</span>
+        <select name="marking">
+          <option value="" {% if not filters.marking %}selected{% endif %}>Все</option>
+          <option value="yes" {% if filters.marking == 'yes' %}selected{% endif %}>Требуется маркировка</option>
+          <option value="no" {% if filters.marking == 'no' %}selected{% endif %}>Не требует маркировки</option>
+        </select>
+      </label>
+      <label>
+        <span>Активность</span>
+        <select name="active">
+          <option value="active" {% if filters.active == 'active' %}selected{% endif %}>Активные</option>
+          <option value="all" {% if filters.active == 'all' %}selected{% endif %}>Все</option>
+          <option value="inactive" {% if filters.active == 'inactive' %}selected{% endif %}>Архивные</option>
+        </select>
+      </label>
+      <button type="submit">Найти</button>
+      <a class="button-link subtle" href="/catalog">Сбросить</a>
+    </form>
+
+    <div class="catalog-bulk-row">
+      <div><b>Выбрано:</b> <span data-selected-count>0</span></div>
+      <button type="button" class="secondary" data-open-bulk disabled>Применить документ соответствия</button>
+      <button type="button" class="secondary" data-select-visible>Выбрать все на странице</button>
+    </div>
+
+    <details class="catalog-import-box">
+      <summary>Импортировать XLSX</summary>
+      <form class="catalog-import-form" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".xlsx" required>
+        <select name="mode">
+          <option value="merge">Обновить и добавить</option>
+          <option value="replace">Заменить каталог: отсутствующие строки архивировать</option>
+        </select>
+        <button type="submit" class="primary">Импортировать</button>
+        <div class="hint">Перед импортом FBE создает копию базы. Новый шаблон использует «Профиль маркировки» вместо старого столбца КИЗ.</div>
+      </form>
+    </details>
+  </section>
+
+  <section class="card catalog-table-card">
+    <div class="section-head compact-head">
+      <div>
+        <h2>Товары</h2>
+        <div class="hint">Показано {{ products|length }} из {{ result.total }} · страница {{ result.page }} из {{ result.pages }}</div>
+      </div>
+    </div>
+    <div class="catalog-table-scroll">
+      <table class="catalog-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" data-master-select></th>
+            <th>Артикул</th>
+            <th>Товар</th>
+            <th>Категория</th>
+            <th>Маркировка</th>
+            <th>GTIN</th>
+            <th>Документ соответствия</th>
+            <th>Статус</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in products %}
+          <tr class="{{ 'catalog-inactive' if not item.active else '' }}">
+            <td><input type="checkbox" data-product-select value="{{ item.seller_article }}"></td>
+            <td><code>{{ item.seller_article }}</code>{% if item.wb_article %}<div class="muted small">WB: {{ item.wb_article }}</div>{% endif %}</td>
+            <td>
+              <div class="strong-line">{{ item.product or item.seller_article }}</div>
+              <div class="muted small">{{ item.subcategory }}{% if item.volume %} · {{ item.volume }}{% endif %}{% if item.sample %} + {{ item.sample }} {{ item.sample_volume }}{% endif %}</div>
+            </td>
+            <td>{{ item.category or '—' }}</td>
+            <td>
+              <span class="badge {{ 'kiz-required' if item.kiz_required else 'muted-badge' }}">{{ 'КИЗ' if item.kiz_required else 'Не маркируется' }}</span>
+              {% set profile_names = {'AUTO':'Авто', 'PERFUMERY':'Парфюмерия', 'CHEMISTRY':'Дезодоранты', 'NONE':'Не требует маркировки', 'CUSTOM':'Пользовательский'} %}
+              <div class="muted small">{{ profile_names.get(item.marking_profile or 'AUTO', item.marking_profile or 'Авто') }}{% if item.product_group %} · {{ item.product_group }} / {{ item.template_id }}{% endif %}</div>
+            </td>
+            <td><code>{{ item.gtin or '—' }}</code></td>
+            <td>
+              {% set cert_names = {'CONFORMITY_DECLARATION':'Декларация', 'CONFORMITY_CERTIFICATE':'Сертификат'} %}
+              <div>{{ cert_names.get(item.certificate_type, item.certificate_type) if item.certificate_type else '—' }}</div>
+              {% if item.certificate_number %}<div class="muted small">{{ item.certificate_number }}</div>{% endif %}
+              {% if item.certificate_date or item.certificate_valid_until %}<div class="muted small">{{ item.certificate_date or '—' }} - {{ item.certificate_valid_until or 'бессрочно' }}</div>{% endif %}
+            </td>
+            <td><span class="badge {{ 'good' if item.active else 'muted-badge' }}">{{ 'Активен' if item.active else 'Архив' }}</span></td>
+            <td class="row-actions">
+              <button type="button" class="secondary small-button" data-edit-product="{{ item.seller_article }}">Изменить</button>
+              <button type="button" class="small-button {{ 'archive-button' if item.active else 'restore-button' }}" title="{{ 'Архивировать' if item.active else 'Восстановить' }}" data-toggle-active="{{ item.seller_article }}" data-active="{{ 1 if item.active else 0 }}">{{ 'В архив' if item.active else 'Вернуть' }}</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="muted catalog-empty">Каталог пуст или по фильтру ничего не найдено. Импортируйте XLSX либо добавьте товар вручную.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if result.pages > 1 %}
+    <nav class="catalog-pagination">
+      {% if result.page > 1 %}<a href="/catalog?q={{ filters.q|urlencode }}&category={{ filters.category|urlencode }}&marking={{ filters.marking }}&active={{ filters.active }}&page={{ result.page - 1 }}">← Назад</a>{% endif %}
+      <span>{{ result.page }} / {{ result.pages }}</span>
+      {% if result.page < result.pages %}<a href="/catalog?q={{ filters.q|urlencode }}&category={{ filters.category|urlencode }}&marking={{ filters.marking }}&active={{ filters.active }}&page={{ result.page + 1 }}">Вперед →</a>{% endif %}
+    </nav>
+    {% endif %}
+  </section>
+
+  <section class="card samples-card">
+    <div class="section-head compact-head">
+      <div>
+        <h2>Ароматы для печати переходников</h2>
+        <div class="hint">Список хранится в SQLite и используется в ручной печати.</div>
+      </div>
+      <button type="button" class="secondary" data-new-sample>+ Добавить аромат</button>
+    </div>
+    <div class="samples-grid">
+      {% for sample in samples %}
+      <button type="button" class="sample-chip {{ 'is-off' if not sample.active else '' }}" data-edit-sample="{{ sample|tojson|forceescape }}">
+        <b>{{ sample.sample_no or '—' }}</b><span>{{ sample.name }}</span>
+      </button>
+      {% else %}<div class="muted">Список пуст.</div>{% endfor %}
+    </div>
+  </section>
+</main>
+
+<datalist id="category-options">
+  <option value="Парфюмерия"></option>
+  <option value="Дезодоранты"></option>
+  <option value="СПА"></option>
+  <option value="Наборы"></option>
+  {% for item in result.categories %}<option value="{{ item }}"></option>{% endfor %}
+</datalist>
+<datalist id="subcategory-options">
+  <option value="Духи масляные"></option>
+  <option value="Духи"></option>
+  <option value="Парфюмерная вода"></option>
+  <option value="Туалетная вода"></option>
+  <option value="Дезодорант"></option>
+</datalist>
+
+<dialog id="product-dialog" class="catalog-dialog product-catalog-dialog">
+  <form method="dialog" class="dialog-shell" id="product-form">
+    <div class="dialog-head">
+      <div><div class="eyebrow">Карточка каталога</div><h3 data-product-dialog-title>Новый товар</h3></div>
+      <button type="button" class="dialog-close" data-close-dialog>×</button>
+    </div>
+    <input type="hidden" name="original_article">
+
+    <section class="catalog-form-section">
+      <div class="form-section-head"><h4>Основные данные</h4><span>То, что определяет товар и его название</span></div>
+      <div class="form-grid two-cols">
+        <label><span>Артикул продавца *</span><input name="seller_article" required></label>
+        <label><span>Артикул WB</span><input name="wb_article"></label>
+        <label><span>Подкатегория</span><input name="subcategory" list="subcategory-options"></label>
+        <label><span>Название продукта</span><input name="product"></label>
+        <label><span>Объем / формат</span><input name="volume"></label>
+        <label><span>Категория</span><input name="category" list="category-options"></label>
+      </div>
+    </section>
+
+    <section class="catalog-form-section sample-form-section">
+      <div class="form-section-head"><h4>Пробник в комплекте</h4><span>Заполняется только для комплектов с пробником</span></div>
+      <div class="form-grid two-cols">
+        <label><span>Пробник</span><input name="sample"></label>
+        <label><span>Объем пробника</span><input name="sample_volume"></label>
+      </div>
+    </section>
+
+    <section class="catalog-form-section compliance-form-section">
+      <div class="form-section-head"><h4>Документ соответствия</h4><span>Реквизиты автоматически перейдут в блок Честного Знака</span></div>
+      <div class="form-grid two-cols">
+        <label><span>Тип документа</span>
+          <select name="certificate_type">
+            <option value="">Не указан</option>
+            <option value="CONFORMITY_DECLARATION">Декларация о соответствии</option>
+            <option value="CONFORMITY_CERTIFICATE">Сертификат соответствия</option>
+          </select>
+        </label>
+        <label class="wide"><span>Номер документа</span><input name="certificate_number" placeholder="Номер декларации или сертификата"></label>
+        <label><span>Дата начала действия</span><input name="certificate_date" type="date"></label>
+        <label><span>Дата окончания действия</span><input name="certificate_valid_until" type="date"></label>
+      </div>
+    </section>
+
+    <section class="catalog-form-section technical-form-section" aria-live="polite">
+      <div class="form-section-head"><h4>Профиль маркировки</h4><span>Понятные настройки вместо ручного templateId</span></div>
+      <div class="form-grid marking-edit-grid">
+        <label><span>Профиль</span>
+          <select name="marking_profile" required>
+            <option value="" disabled selected>Выберите профиль</option>
+            <option value="PERFUMERY">Парфюмерия</option>
+            <option value="CHEMISTRY">Дезодоранты и косметика</option>
+            <option value="NONE">Не требует маркировки</option>
+            <option value="CUSTOM">Пользовательский (из Excel)</option>
+          </select>
+        </label>
+        <label><span>GTIN</span><input name="gtin" inputmode="numeric" maxlength="14" placeholder="14 цифр"></label>
+        <label><span>ТН ВЭД 10</span><input name="tnved_code" inputmode="numeric" maxlength="10" placeholder="10 цифр"></label>
+        <label><span>Срок годности, мес.</span><input name="shelf_life_months" inputmode="numeric" placeholder="Для chemistry, например 24"></label>
+        <label><span>Этиловый спирт, %</span><input name="alcohol_volume_pct" inputmode="decimal" placeholder="Для chemistry; 0 если спирта нет"></label>
+      </div>
+      <div class="technical-summary-grid compact-technical-summary">
+        <div><span>Результат</span><strong data-tech-profile>Не определен</strong></div>
+        <div><span>Группа ЧЗ</span><code data-tech-group>—</code></div>
+        <div><span>Шаблон / тип</span><code data-tech-template>—</code></div>
+        <div><span>Маркировка</span><strong data-tech-kiz>Без КИЗ</strong></div>
+      </div>
+      <p class="technical-note">Профиль маркировки является источником истины. «Не требует маркировки» отключает КИЗ даже для категории «Парфюмерия». GTIN, ТН ВЭД и документ соответствия можно заполнить здесь или импортировать из XLSX; блок Честного Знака подхватит их автоматически. Для дезодорантов дополнительно укажите срок годности в месяцах и фактическое содержание этилового спирта (0, если его нет) - эти данные нужны для отчета о нанесении.</p>
+    </section>
+
+    <details class="catalog-form-section expandable-form-section" open>
+      <summary><span>Маркетинговая информация</span><small>Для карточек, сайта и аналитики</small></summary>
+      <div class="form-grid two-cols expandable-content">
+        <label class="wide"><span>Маркетинговое название</span><input name="marketing_title"></label>
+        <label><span>Семейство аромата</span><input name="fragrance_family" placeholder="Гурманский, цветочный, древесный…"></label>
+        <label><span>Аудитория</span><input name="target_audience" placeholder="Женский, унисекс…"></label>
+        <label class="wide"><span>Ключевые слова</span><input name="marketing_keywords" placeholder="Через запятую"></label>
+        <label class="wide"><span>Маркетинговое описание</span><textarea name="marketing_description" rows="3"></textarea></label>
+      </div>
+    </details>
+
+    <details class="catalog-form-section expandable-form-section">
+      <summary><span>Логистическая информация</span><small>Габариты и упаковка</small></summary>
+      <div class="form-grid logistics-grid expandable-content">
+        <label><span>Длина, см</span><input name="package_length_cm" inputmode="decimal"></label>
+        <label><span>Ширина, см</span><input name="package_width_cm" inputmode="decimal"></label>
+        <label><span>Высота, см</span><input name="package_height_cm" inputmode="decimal"></label>
+        <label><span>Вес с упаковкой, г</span><input name="package_weight_g" inputmode="decimal"></label>
+        <label><span>Штук в коробе</span><input name="units_per_box" inputmode="numeric"></label>
+      </div>
+    </details>
+
+    <details class="catalog-form-section expandable-form-section finance-form-section" open>
+      <summary><span>Себестоимость</span><small>Единственный финансовый показатель, который заполняет производитель</small></summary>
+      <div class="expandable-content finance-content">
+        <div class="finance-subsection">
+          <div class="form-grid finance-cost-grid">
+            <label><span>Полная себестоимость единицы, ₽</span><input name="cost_price_rub" inputmode="decimal" placeholder="Например, 125"></label>
+          </div>
+          <p class="technical-note">Цена, комиссия WB, логистика, реклама и налог не задаются в каталоге. Они будут получаться из фактических отчетов и рассчитываться отдельными модулями.</p>
+        </div>
+      </div>
+    </details>
+
+    <section class="catalog-form-section">
+      <div class="form-grid two-cols">
+        <label class="wide"><span>Комментарий</span><textarea name="notes" rows="3"></textarea></label>
+        <label class="check-label"><input type="checkbox" name="active" checked><span>Активный товар</span></label>
+      </div>
+    </section>
+
+    <div class="dialog-actions">
+      <button type="button" class="secondary" data-close-dialog>Отмена</button>
+      <button type="submit" class="primary">Сохранить в базу</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="bulk-dialog" class="catalog-dialog compact-dialog">
+  <form method="dialog" class="dialog-shell" id="bulk-form">
+    <div class="dialog-head"><div><div class="eyebrow">Массовая операция</div><h3>Документ соответствия</h3></div><button type="button" class="dialog-close" data-close-dialog>×</button></div>
+    <p>Реквизиты применятся к <b data-bulk-count>0</b> выбранным товарам. Профиль маркировки каждого товара не изменится.</p>
+    <div class="form-grid two-cols">
+      <label><span>Тип документа</span>
+        <select name="certificate_type">
+          <option value="">Определить по номеру</option>
+          <option value="CONFORMITY_DECLARATION">Декларация о соответствии</option>
+          <option value="CONFORMITY_CERTIFICATE">Сертификат соответствия</option>
+        </select>
+      </label>
+      <label class="wide"><span>Номер документа</span><input name="certificate_number"></label>
+      <label><span>Дата начала действия</span><input name="certificate_date" type="date"></label>
+      <label><span>Дата окончания действия</span><input name="certificate_valid_until" type="date"></label>
+    </div>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Отмена</button><button type="submit" class="primary">Применить</button></div>
+  </form>
+</dialog>
+
+<dialog id="sample-dialog" class="catalog-dialog compact-dialog">
+  <form method="dialog" class="dialog-shell" id="sample-form">
+    <div class="dialog-head"><h3>Аромат переходника</h3><button type="button" class="dialog-close" data-close-dialog>×</button></div>
+    <input type="hidden" name="original_name">
+    <div class="form-grid two-cols">
+      <label><span>№</span><input name="sample_no"></label>
+      <label><span>Название *</span><input name="name" required></label>
+      <label><span>Артикул WB</span><input name="wb_code"></label>
+      <label class="wide"><span>QR-ссылка</span><input name="qr_link"></label>
+      <label class="check-label"><input type="checkbox" name="active" checked><span>Активен</span></label>
+    </div>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Отмена</button><button type="submit" class="primary">Сохранить</button></div>
+  </form>
+</dialog>
+
+<div class="catalog-toast" data-catalog-toast hidden></div>
+<script src="/static/catalog.js?b={{ fbe_build_id }}"></script>
+<script src="/static/connections.js?b={{ fbe_build_id }}"></script>
+</body>
+</html>

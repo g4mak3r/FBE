@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FBE {{ fbe_version }} · Вывод КИЗ</title>
+  <link rel="icon" href="/static/icons/favicon.ico?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/style.css?b={{ fbe_build_id }}">
+</head>
+<body>
+{% set active_nav = "post" %}
+{% set local_tabs = false %}
+{% include "partials/sidebar.html" %}
+<div class="workspace-heading" id="workspace-title" tabindex="-1"><h1>Вывод КИЗ</h1></div>
+
+<main class="kiz-retire-page">
+  {% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+  {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+
+  <section class="kiz-retire-toolbar card">
+    <div class="kiz-retire-title">
+      <div class="eyebrow">FBS · после передачи WB</div>
+      <h2>Вывод КИЗ</h2>
+    </div>
+    <div class="kiz-retire-toolbar-actions">
+      <form method="get" action="/marking/post-sale" class="kiz-search-form">
+        <label class="kiz-date-filter"><span>С даты</span><input type="date" name="date_from" value="{{ date_from }}"></label>
+        <input class="kiz-query-input" name="q" value="{{ query }}" placeholder="Задание, артикул, КИЗ или поставка" autocomplete="off">
+        <button type="submit" class="button-soft">Показать</button>
+        {% if query or date_from %}<a class="button-link subtle" href="/marking/post-sale">Сбросить</a>{% endif %}
+      </form>
+      <button type="button" id="refresh-post-sale" class="accent-blue">↻ Синхронизировать WB</button>
+    </div>
+  </section>
+  <div id="post-sale-sync-status" class="kiz-sync-status" aria-live="polite"></div>
+
+  <section class="kiz-retire-stats">
+    <div class="kiz-stat"><span>{% if date_from %}С {{ date_from[8:10] }}.{{ date_from[5:7] }}.{{ date_from[0:4] }}{% else %}В реестре{% endif %}</span><strong>{{ rows|length }}</strong></div>
+    <div class="kiz-stat"><span>Передано / в пути</span><strong>{{ at_wb|length }}</strong></div>
+    <div class="kiz-stat warn"><span>К выводу</span><strong>{{ ready|length }}</strong></div>
+    <div class="kiz-stat ok"><span>Выведено</span><strong>{{ retired|length }}</strong></div>
+    <div class="kiz-stat {% if issues %}error{% endif %}"><span>Требует внимания</span><strong>{{ issues|length }}</strong></div>
+  </section>
+
+  <section class="card kiz-ready-card">
+    <div class="kiz-section-head">
+      <div>
+        <h3>Получено покупателем</h3>
+        <span>Только задания с подтвержденным WB-статусом продажи и КИЗом в обороте.</span>
+      </div>
+      <div class="kiz-section-actions">
+        <button type="button" id="select-ready-all" class="button-soft" {% if not ready %}disabled{% endif %}>Выбрать все</button>
+        <button type="button" id="retire-selected" class="accent-red" {% if not ready %}disabled{% endif %}>Вывести выбранные</button>
+      </div>
+    </div>
+
+    <div class="kiz-table-wrap">
+      <table class="kiz-compact-table">
+        <thead><tr><th></th><th>Товар</th><th>Сборочное задание</th><th>Поставка</th><th>WB</th><th>КИЗ</th></tr></thead>
+        <tbody>
+          {% for r in ready %}
+          <tr>
+            <td><input type="checkbox" class="retire-check" value="{{ r.order_id }}"></td>
+            <td><strong>{{ r.display_name }}</strong><small>{{ r.seller_article or '—' }}</small></td>
+            <td><code>{{ r.order_id }}</code></td>
+            <td><span>{{ r.supply_name or r.supply_id or '—' }}</span><small>{{ r.supply_id or '' }}</small></td>
+            <td><span class="badge ok">{{ r.wb_status or 'sold' }}</span></td>
+            <td><span class="kiz-short" title="{{ r.raw_code }}">{{ r.gtin or 'КИЗ назначен' }}</span><small>{{ 'получен из WB' if r.kiz_source=='WB' else 'FBE' }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="empty-state">После синхронизации сюда попадут только реально полученные покупателем задания.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="kiz-secondary-grid">
+    <details class="card kiz-list-check" {% if query %}open{% endif %}>
+      <summary><span><b>Проверить список заданий</b><small>Можно вставить номера из WB построчно или через пробел.</small></span><span>+</span></summary>
+      <div class="kiz-list-check-body">
+        <textarea id="post-sale-order-list" rows="5" placeholder="123456789\n123456790\n123456791"></textarea>
+        <button type="button" id="check-order-list" class="accent-violet">Проверить статусы</button>
+      </div>
+    </details>
+
+    <details class="card kiz-return-card">
+      <summary><span><b>Возвраты</b><small>Для КИЗ, которые уже были выведены после продажи.</small></span><span>{{ retired|length }}</span></summary>
+      <div class="kiz-return-body">
+        {% for r in retired %}
+        <label class="kiz-return-row">
+          <input type="checkbox" class="return-check" value="{{ r.order_id }}" {% if not r.can_return %}disabled{% endif %}>
+          <span><b>{{ r.display_name }}</b><small>{{ r.order_id }} · {{ r.supply_name or r.supply_id or '—' }}</small></span>
+          <span class="badge {{ r.post_sale_class }}">{{ r.post_sale_label }}</span>
+        </label>
+        {% else %}<div class="empty-state">Выведенных КИЗ пока нет.</div>{% endfor %}
+        <button type="button" id="return-selected" class="accent-amber" {% if not retired %}disabled{% endif %}>Вернуть выбранные в оборот</button>
+      </div>
+    </details>
+  </section>
+
+  {% if issues %}
+  <section class="card kiz-issues-card">
+    <div class="kiz-section-head"><div><h3>Требует внимания</h3><span>WB уже знает задание, но FBE не может безопасно выполнить действие.</span></div></div>
+    <div class="kiz-issue-list">
+      {% for r in issues %}
+      <div class="kiz-issue-row">
+        <span><b>{{ r.display_name }}</b><small>задание {{ r.order_id }} · {{ r.supply_name or r.supply_id or 'без поставки' }}</small></span>
+        <span class="badge {{ r.post_sale_class }}">{{ r.post_sale_label }}</span>
+        {% if r.wb_meta_has_kiz and not r.raw_code %}<small class="kiz-wb-meta-note">WB metadata: {{ r.wb_sgtin_state or 'КИЗ заполнен' }}</small>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <details class="card kiz-registry-card" {% if query %}open{% endif %}>
+    <summary><span><b>Все известные сборочные задания</b><small>Локальный реестр WB + связь с конкретным КИЗ.</small></span><span>{{ rows|length }}</span></summary>
+    <div class="kiz-table-wrap">
+      <table class="kiz-compact-table registry-table">
+        <thead><tr><th>Сборочное задание</th><th>Товар</th><th>Поставка</th><th>WB</th><th>КИЗ</th><th>Честный Знак</th></tr></thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td><code>{{ r.order_id }}</code></td>
+            <td><strong>{{ r.display_name }}</strong><small>{{ r.seller_article or '—' }}</small></td>
+            <td><span>{{ r.supply_name or r.supply_id or '—' }}</span><small>{{ r.supply_id or '' }}</small></td>
+            <td><span class="badge {{ 'ok' if r.wb_status=='sold' else 'muted' if r.wb_status=='canceled' else 'info' }}">{{ r.wb_status or 'не получен' }}</span></td>
+            <td>
+              {% if r.raw_code %}<span class="badge {{ 'info' if r.kiz_source=='WB' else 'muted' }}">{{ r.kiz_source or 'FBE' }}</span><small>{{ r.gtin or 'КИЗ найден' }}</small>
+              {% elif r.wb_meta_has_kiz %}<span class="badge warn">Есть в WB</span><small>{{ r.wb_sgtin_state or 'metadata' }}</small>
+              {% else %}<span class="muted-text">—</span>{% endif %}
+            </td>
+            <td><span class="badge {{ r.post_sale_class }}">{{ r.post_sale_label }}</span></td>
+          </tr>
+          {% else %}<tr><td colspan="6" class="empty-state">Реестр пока пуст. Нажмите «Синхронизировать WB».</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  {% if canceled %}
+  <details class="card kiz-canceled-card">
+    <summary><span><b>Отказы / отмены</b><small>КИЗ не выводится из оборота.</small></span><span>{{ canceled|length }}</span></summary>
+    <div class="kiz-issue-list">{% for r in canceled %}<div class="kiz-issue-row"><span><b>{{ r.display_name }}</b><small>{{ r.order_id }} · {{ r.supply_name or r.supply_id or '—' }}</small></span><span class="badge muted">Остается в обороте</span></div>{% endfor %}</div>
+  </details>
+  {% endif %}
+</main>
+
+<script>
+async function postJson(url, body={}) {
+  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const x = await r.json().catch(()=>({}));
+  if(!r.ok || x.ok===false) throw new Error(x.error || x.message || 'Ошибка');
+  return x;
+}
+function checkedIds(cls){return [...document.querySelectorAll(cls+':checked')].map(x=>Number(x.value)).filter(Boolean);}
+function parseOrderIds(text){return [...new Set((text.match(/\d{5,}/g)||[]).map(Number).filter(Boolean))];}
+
+const activeDate={{ date_from|tojson }};
+const refreshButton=document.getElementById('refresh-post-sale');
+const syncStatus=document.getElementById('post-sale-sync-status');
+function syncText(text,error=false){if(syncStatus){syncStatus.textContent=text||'';syncStatus.classList.toggle('error',error);}}
+async function pollBackgroundJob(jobId){
+  while(true){
+    const r=await fetch('/api/jobs/'+encodeURIComponent(jobId));
+    const x=await r.json().catch(()=>({}));
+    if(!r.ok||x.ok===false) throw new Error(x.error||'Не удалось получить статус задачи');
+    const prefix=x.total?`${Math.min(Number(x.progress||0),Number(x.total))}/${x.total} · `:'';
+    syncText(prefix+(x.message||'Синхронизация…'),x.state==='error');
+    if(x.state==='done') return x;
+    if(x.state==='error') throw new Error(x.error||x.message||'Ошибка синхронизации');
+    await new Promise(resolve=>setTimeout(resolve,800));
+  }
+}
+refreshButton?.addEventListener('click',async()=>{
+  refreshButton.disabled=true; refreshButton.textContent='Синхронизация…';
+  syncText('Запускаю синхронизацию в фоне…');
+  try{
+    const x=await postJson('/api/marking/post-sale/refresh');
+    if(x.job_id) await pollBackgroundJob(x.job_id);
+    syncText('Готово · обновляю реестр');
+    location.reload();
+  } catch(err){
+    syncText(err.message,true);
+    refreshButton.disabled=false; refreshButton.textContent='↻ Синхронизировать WB';
+  }
+});
+
+document.getElementById('check-order-list')?.addEventListener('click',async e=>{
+  const ids=parseOrderIds(document.getElementById('post-sale-order-list')?.value||'');
+  if(!ids.length){alert('Не нашел номеров сборочных заданий');return;}
+  e.currentTarget.disabled=true;
+  try{const x=await postJson('/api/marking/post-sale/check-orders',{order_ids:ids}); const done=x.job_id?await pollBackgroundJob(x.job_id):x; alert(done.result?.message||done.message||'Готово'); location.href='/marking/post-sale?q='+encodeURIComponent(String(ids[0]))+(activeDate?'&date_from='+encodeURIComponent(activeDate):'');}
+  catch(err){alert(err.message); e.currentTarget.disabled=false;}
+});
+
+document.getElementById('select-ready-all')?.addEventListener('click',()=>{
+  const boxes=[...document.querySelectorAll('.retire-check')];
+  const all=boxes.length && boxes.every(x=>x.checked); boxes.forEach(x=>x.checked=!all);
+});
+
+document.getElementById('retire-selected')?.addEventListener('click',async e=>{
+  const order_ids=checkedIds('.retire-check');
+  if(!order_ids.length){alert('Выберите сборочные задания');return;}
+  if(!confirm(`Вывести из оборота ${order_ids.length} КИЗ по подтвержденным продажам WB?`))return;
+  e.currentTarget.disabled=true;
+  try{const x=await postJson('/api/marking/post-sale/retire',{order_ids,confirmed:true}); const done=x.job_id?await pollBackgroundJob(x.job_id):x; alert(done.result?.message||done.message||'Отправлено'); location.reload();}
+  catch(err){alert(err.message); e.currentTarget.disabled=false;}
+});
+
+document.getElementById('return-selected')?.addEventListener('click',async e=>{
+  const order_ids=checkedIds('.return-check');
+  if(!order_ids.length){alert('Выберите КИЗ');return;}
+  if(!confirm(`Вернуть в оборот ${order_ids.length} КИЗ после возврата?`))return;
+  e.currentTarget.disabled=true;
+  try{const x=await postJson('/api/marking/post-sale/return',{order_ids,confirmed:true}); const done=x.job_id?await pollBackgroundJob(x.job_id):x; alert(done.result?.message||done.message||'Отправлено'); location.reload();}
+  catch(err){alert(err.message); e.currentTarget.disabled=false;}
+});
+</script>
+<script src="/static/connections.js?b={{ fbe_build_id }}"></script>
+</body>
+</html>

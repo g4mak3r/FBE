@@ -1,0 +1,82 @@
+<div class="needs-modal-card" role="document">
+  <div class="needs-modal-head">
+    <div>
+      <div class="needs-title">{{ title }}</div>
+      <div class="needs-subtitle">{{ subtitle }} · {{ needs.total_orders }} заказов</div>
+    </div>
+    <div class="needs-head-actions">
+      <form method="post" action="/needs/articles.xlsx" class="needs-download-form">
+        <input type="hidden" name="subtitle" value="{{ subtitle }}">
+        {% for article in articles or [] %}
+          <input type="hidden" name="articles" value="{{ article }}">
+        {% endfor %}
+        <button type="submit" class="primary small-button needs-download-xlsx">Скачать XLSX</button>
+      </form>
+      <button type="button" class="secondary small-button" data-close-needs-modal>Закрыть</button>
+    </div>
+  </div>
+
+  {% if needs.warnings %}
+    <div class="banner warn compact-banner">
+      {% for w in needs.warnings %}{{ w }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="needs-summary-line">
+    Распознано по каталогу товаров: <b>{{ needs.recognized_orders }}</b> из <b>{{ needs.total_orders }}</b>
+  </div>
+
+  {% if needs.groups %}
+    <div class="needs-groups">
+      {% for group in needs.groups %}
+        <section class="needs-group">
+          <div class="needs-group-title">{{ group["name"] }} <span>{{ group["total"] }} шт</span></div>
+          <table class="needs-table">
+            <tbody>
+              {% for item in group["items"] %}
+                <tr>
+                  <td class="needs-count">{{ item["count"] }}шт</td>
+                  <td>{{ item["label"] }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="muted">Нет распознанных позиций для учета.</div>
+  {% endif %}
+
+  {% if needs.samples %}
+    <section class="needs-group needs-samples-group">
+      <div class="needs-group-title">Пробники <span>{{ needs.samples|sum(attribute='count') }} шт</span></div>
+      <table class="needs-table">
+        <tbody>
+          {% for item in needs.samples %}
+            <tr>
+              <td class="needs-count">{{ item["count"] }}шт</td>
+              <td>{{ item["label"] }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
+  {% if needs.missing %}
+    <details class="needs-missing">
+      <summary>Не распознано: {{ needs.missing|length }}</summary>
+      <table class="needs-table compact-table">
+        <tbody>
+          {% for item in needs.missing %}
+            <tr>
+              <td><code>{{ item["seller_article"] }}</code></td>
+              <td class="muted">заказ {{ item["order_id"] }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  {% endif %}
+</div>

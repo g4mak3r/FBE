@@ -1,0 +1,321 @@
+<div class="marking-needs-content marking-workflow"
+     data-marking-needs-content
+     data-supply-id="{{ supply_id }}"
+     data-suz-block
+     data-suz-payment-type="{{ marking.suz.payment_type or 1 }}"
+     data-marking-total="{{ marking.total_orders or 0 }}"
+     data-marking-required="{{ marking.marking_orders or 0 }}"
+     data-marking-assigned="{{ marking.assigned_orders or 0 }}"
+     data-marking-to-order="{{ marking.to_order_total or 0 }}"
+     data-marking-printed="{{ marking.printed_codes or 0 }}"
+     data-marking-applied="{{ marking.applied_codes or 0 }}"
+     data-marking-introduced="{{ marking.introduced_codes or 0 }}"
+     data-marking-sent-wb="{{ marking.sent_wb_orders or 0 }}"
+     data-marking-processing="{{ marking.processing_codes or 0 }}"
+     data-marking-live-work="{{ '1' if marking.has_live_work else '0' }}"
+     data-marking-codes-fully-received="{{ '1' if marking.codes_fully_received else '0' }}"
+     data-marking-codes-fully-printed="{{ '1' if marking.codes_fully_printed else '0' }}"
+     data-marking-application-report-required="{{ '1' if marking.application_report_required else '0' }}"
+     data-marking-application-report-complete="{{ '1' if marking.application_report_complete else '0' }}"
+     data-marking-all-introduced="{{ '1' if marking.all_marking_introduced else '0' }}"
+     data-marking-all-wb-sent="{{ '1' if marking.all_wb_sent else '0' }}"
+     data-marking-order-perfumery="{{ marking.suz_order_plan.perfumery or 0 }}"
+     data-marking-order-chemistry="{{ marking.suz_order_plan.chemistry or 0 }}"
+     data-marking-order-perfumery-gtins="{{ marking.suz_order_plan_gtins.perfumery or 0 }}"
+     data-marking-order-chemistry-gtins="{{ marking.suz_order_plan_gtins.chemistry or 0 }}"
+     data-marking-chemistry="{{ marking.chemistry_codes or 0 }}"
+     data-marking-chemistry-pending="{{ marking.chemistry_pending_application_count or 0 }}"
+     data-marking-chemistry-needs-report="{{ '1' if marking.chemistry_needs_utilisation else '0' }}"
+     data-marking-chemistry-report-in-progress="{{ '1' if marking.chemistry_application_in_progress else '0' }}"
+     data-marking-suz-ready="{{ '1' if marking.suz.ready else '0' }}"
+     data-global-can-order="{{ '1' if marking.suz_can_create else '0' }}"
+     data-global-can-print="{{ '1' if marking.can_print_direct else '0' }}"
+     data-global-can-introduce="{{ '1' if marking.can_start_introduction else '0' }}"
+     data-global-can-send-wb="{{ '1' if marking.can_send_wb and not marking.all_wb_sent else '0' }}">
+  <div class="marking-live-message" data-marking-message aria-live="polite" hidden></div>
+
+  <details class="marking-settings-panel">
+    <summary>
+      <span class="marking-settings-title">Подключение, УКЭП и юридические настройки</span>
+      <span class="marking-settings-summary">
+        <span class="status-dot {{ 'ok' if marking.suz.ready else 'warn' }}"></span>
+        {{ 'Подключено' if marking.suz.ready else 'Требует настройки' }}
+        {% if marking.circulation_defaults.oms_id %} · OMS {{ marking.circulation_defaults.oms_id }}{% endif %}{% if marking.circulation_defaults.connection_id %} · SUZ {{ marking.circulation_defaults.connection_id }}{% endif %}{% if marking.circulation_defaults.participant_inn %} · ИНН {{ marking.circulation_defaults.participant_inn }}{% endif %}
+      </span>
+    </summary>
+    <div class="marking-settings-body">
+      <section class="marking-settings-section">
+        <div class="marking-settings-section-head">
+          <div><b>Подключение к Честному Знаку</b><span>Проверка СУЗ, True API и выбранной УКЭП</span></div>
+          <button type="button" class="secondary" data-suz-test>Проверить подключение</button>
+        </div>
+        <div class="suz-readiness-list marking-readiness-compact">
+          {% for check in marking.suz["items"] %}
+            <div class="suz-readiness-item {{ 'ready' if check.ready else ('optional' if not check.required else 'missing') }}">
+              <span>{{ '✓' if check.ready else ('·' if not check.required else '○') }}</span>
+              <b>{{ check.label }}</b>
+              <small>{{ check.value if check.ready and check.value else ('настроено' if check.ready else ('необязательно' if not check.required else 'не настроено')) }}</small>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="suz-certificate-panel marking-certificate-compact">
+          <div><b>Сертификат УКЭП Windows</b><div class="hint">Выбор сохраняется. PIN и закрытый ключ FBE не хранит.</div></div>
+          <div class="suz-certificate-controls">
+            <button type="button" class="secondary" data-suz-load-certificates>Найти сертификаты</button>
+            <select data-suz-certificate-select disabled><option value="">Сначала найдите сертификаты</option></select>
+            <button type="button" data-suz-save-certificate disabled>Использовать</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="marking-settings-section marking-balance-section">
+        <div class="marking-settings-section-head">
+          <div><b>Баланс КИЗ</b><span>Стоимость кодов списывается с лицевого счета Честного Знака</span></div>
+          <a class="secondary marking-balance-link" href="https://markirovka.crpt.ru/" target="_blank" rel="noopener noreferrer">Открыть ЛК ЧЗ</a>
+        </div>
+        <div class="marking-balance-card">
+          <div><span>К заказу по поставке</span><b data-marking-balance-demand>{{ marking.to_order_total or 0 }} КИЗ</b></div>
+          <div><span>Баланс лицевого счета</span><b class="muted">в ЛК ЧЗ</b></div>
+          <small>В актуальной подключенной спецификации СУЗ API 3.0 нет подтвержденного метода чтения денежного баланса. FBE не подставляет выдуманную сумму: остаток проверяется в личном кабинете ЧЗ.</small>
+        </div>
+      </section>
+
+      <section class="marking-settings-section">
+        <div class="marking-settings-section-head">
+          <div><b>Юридические настройки</b><span>OMS ID, идентификатор соединения СУЗ и ИНН закреплены до явного ручного изменения; дата производства всегда сегодняшняя</span></div>
+          <button type="button" class="secondary" data-marking-save-legal>Сохранить настройки</button>
+        </div>
+        <div class="marking-legal-grid">
+          <label>
+            <span>OMS ID</span>
+            <input type="text" value="{{ marking.circulation_defaults.oms_id }}" data-suz-oms-id autocomplete="off" spellcheck="false" placeholder="Идентификатор OMS">
+            <small>Сохраняется локально и меняется только вручную</small>
+          </label>
+          <label>
+            <span>Идентификатор соединения СУЗ</span>
+            <input type="text" value="{{ marking.circulation_defaults.connection_id }}" data-suz-connection-id autocomplete="off" spellcheck="false" placeholder="suz connection ID">
+            <small>Сохраняется локально и меняется только вручную</small>
+          </label>
+          <label>
+            <span>ИНН производителя</span>
+            <input type="text" inputmode="numeric" maxlength="12" value="{{ marking.circulation_defaults.participant_inn }}" data-circulation-participant-inn placeholder="10 или 12 цифр">
+            <small>Сохраняется локально и меняется только вручную</small>
+          </label>
+          <label>
+            <span>Дата производства</span>
+            <input type="date" value="{{ marking.circulation_defaults.production_date }}" max="{{ marking.circulation_defaults.production_date }}" data-circulation-production-date readonly aria-readonly="true">
+            <small>Всегда текущая московская дата</small>
+          </label>
+        </div>
+      </section>
+
+      <section class="marking-settings-section">
+        <div class="marking-settings-section-head">
+          <div><b>Документы из Каталога</b><span>ТН ВЭД и реквизиты соответствия подставляются автоматически</span></div>
+          <span class="status-chip {{ 'ok' if not marking.compliance_missing_count else 'warn' }}">
+            {{ 'Все заполнено' if not marking.compliance_missing_count else 'Не заполнено: ' ~ marking.compliance_missing_count }}
+          </span>
+        </div>
+        {% if marking.unmatched_compliance_gtins %}
+          <div class="banner warn compact-banner">Не удалось сопоставить с Каталогом GTIN: {{ marking.unmatched_compliance_gtins|join(', ') }}</div>
+        {% endif %}
+        {% if marking.compliance_conflicts %}
+          <div class="banner warn compact-banner">В Каталоге есть разные реквизиты для одного GTIN: {{ marking.compliance_conflicts|join('; ') }}</div>
+        {% endif %}
+        {% if marking.circulation_gtins %}
+          <div class="marking-compliance-summary">
+            {% for item in marking.circulation_gtins %}
+              <div>
+                <span><b>{{ item.name }}</b><small>{{ item.article or '—' }} · GTIN {{ item.gtin }}</small></span>
+                <span><b>{{ item.tnved or 'Нет ТН ВЭД' }}</b><small>{{ item.certificate_number or 'Нет документа соответствия' }}</small></span>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </section>
+    </div>
+  </details>
+
+  <section class="marking-overview-panel">
+    <div class="marking-overview-main">
+      <div><span>Всего заданий</span><b>{{ marking.total_orders }}</b></div>
+      <div class="accent"><span>Требуют КИЗ</span><b>{{ marking.marking_orders }}</b></div>
+      <div><span>КИЗ закреплено</span><b>{{ marking.assigned_orders or 0 }} / {{ marking.marking_orders or 0 }}</b></div>
+      <div class="{{ 'danger' if marking.missing_orders or marking.unresolved_orders else '' }}"><span>Проблемы каталога</span><b>{{ (marking.missing_orders or 0) + (marking.unresolved_orders or 0) }}</b></div>
+    </div>
+    {% if marking.category_counts %}
+      <div class="marking-category-row">
+        {% for item in marking.category_counts %}<span>{{ item.label }} <b>{{ item.count }}</b></span>{% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  {% if marking.warnings %}
+    <div class="banner warn compact-banner">
+      {% for warning in marking.warnings %}{{ warning }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+    </div>
+  {% endif %}
+
+  <section class="marking-demand-panel">
+    <div class="marking-section-head">
+      <div><h4>Товары, подлежащие маркировке</h4><div class="hint">Потребность рассчитана по артикулам и GTIN из Каталога</div></div>
+      <span class="marking-count-pill">Заказать: {{ marking.to_order_total or 0 }}</span>
+    </div>
+    {% if marking.rows %}
+      <div class="table-scroll marking-table-scroll">
+        <table class="compact-table marking-table marking-demand-table">
+          <thead><tr><th>Категория</th><th>Товар и артикул</th><th>GTIN</th><th>Нужно</th><th>Ожидается</th><th>Не хватает</th></tr></thead>
+          <tbody>
+            {% for item in marking.rows %}
+              <tr>
+                <td><span class="status-chip muted">{{ item.profile_label }}</span></td>
+                <td class="name-cell"><b>{{ item.name }}</b><small class="table-subline">{{ item.articles_text }}</small></td>
+                <td><code class="gtin-code">{{ item.gtin }}</code></td>
+                <td>{{ item.count }}</td>
+                <td>{{ item.pending }}</td>
+                <td><b>{{ item.to_order }}</b></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif marking.marking_orders > 0 %}
+      <div class="marking-empty-state">Маркируемые позиции найдены, но для них нет корректных GTIN.</div>
+    {% else %}
+      <div class="marking-empty-state">В этой поставке нет товаров, требующих маркировку.</div>
+    {% endif %}
+
+    {% if marking.missing or marking.unresolved %}
+      <details class="marking-issues-details" open>
+        <summary>Показать проблемы каталога · {{ (marking.missing_orders or 0) + (marking.unresolved_orders or 0) }}</summary>
+        <div class="marking-issues-list">
+          {% for item in marking.missing %}
+            <div><span><b>{{ item.name }}</b><small>{{ item.seller_article }} · {{ item.count }} шт.</small></span><em>{{ item.reason }}</em></div>
+          {% endfor %}
+          {% for item in marking.unresolved %}
+            <div><span><b>{{ item.seller_article }}</b><small>{{ item.count }} шт.</small></span><em>Артикул не найден в Каталоге</em></div>
+          {% endfor %}
+        </div>
+      </details>
+    {% endif %}
+  </section>
+
+  {% if marking.orders %}
+  <details class="marking-task-map-details">
+    <summary>Сборочные задания и КИЗ · {{ marking.orders|length }}</summary>
+    <div class="table-scroll marking-table-scroll">
+      <table class="compact-table marking-table">
+        <thead><tr><th>Сборочное задание</th><th>Товар</th><th>Артикул</th><th>GTIN</th><th>КИЗ</th></tr></thead>
+        <tbody>
+          {% for item in marking.orders %}
+          <tr>
+            <td><b>{{ item.sticker_display or item.order_id }}</b><small class="table-subline">orderId {{ item.order_id }}</small></td>
+            <td class="name-cell">{{ item.name }}</td>
+            <td><code>{{ item.seller_article }}</code></td>
+            <td><code>{{ item.gtin14 or item.gtin or '—' }}</code></td>
+            <td><span class="status-chip {{ item.human_code_status.class if item.human_code_status else 'muted' }}">{{ item.human_code_status.label if item.human_code_status else 'Код ожидается' }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+
+  <section class="marking-process-panel" aria-labelledby="marking-process-title">
+    <div class="marking-process-head">
+      <div>
+        <span class="marking-process-eyebrow">Рабочий процесс</span>
+        <h3 id="marking-process-title">Коды маркировки — по шагам</h3>
+        <p>Выполняйте этапы последовательно. Подробности открываются только там, где они нужны.</p>
+      </div>
+      <div class="marking-process-total">
+        <span>Поставка</span>
+        <b>{{ marking.assigned_orders or 0 }} / {{ marking.marking_orders or 0 }}</b>
+        <small>КИЗ закреплено</small>
+      </div>
+    </div>
+
+    <div class="marking-process-map" aria-label="Этапы работы с кодами маркировки">
+      <div class="marking-process-node {{ 'is-complete' if marking.marking_orders and not marking.to_order_total and not marking.suz_pending_runtime else ('is-active' if marking.suz_can_create or marking.suz_pending_runtime else 'is-muted') }}">
+        <span class="marking-process-node-number">1</span><span><b>Заказать КИЗы</b><small>{% if marking.suz_pending_runtime %}ожидается {{ marking.suz_pending_runtime }}{% else %}{{ marking.to_order_total or 0 }} к заказу{% endif %}</small></span>
+      </div>
+      <div class="marking-process-node {{ 'is-complete' if marking.codes_fully_printed else ('is-active' if marking.codes_fully_received or marking.suz_pending_runtime else 'is-muted') }}">
+        <span class="marking-process-node-number">2</span><span><b>Получить и печатать</b><small>{{ marking.printed_codes or 0 }} / {{ marking.marking_orders or 0 }}</small></span>
+      </div>
+      <div class="marking-process-node {{ 'is-complete' if marking.application_report_complete else ('is-active' if marking.can_submit_application_report or marking.chemistry_application_in_progress else 'is-muted') }}">
+        <span class="marking-process-node-number">3</span><span><b>Отчет о нанесении</b><small>{% if not marking.application_report_required %}автоматически ЧЗ{% elif marking.application_report_complete %}принят{% elif marking.chemistry_application_in_progress %}обрабатывается{% else %}ожидает печати{% endif %}</small></span>
+      </div>
+      <div class="marking-process-node {{ 'is-complete' if marking.all_marking_introduced else ('is-active' if marking.can_start_introduction or marking.latest_circulation_document else 'is-muted') }}">
+        <span class="marking-process-node-number">4</span><span><b>Ввести в оборот</b><small>{{ marking.introduced_codes or 0 }} / {{ marking.marking_orders or 0 }}</small></span>
+      </div>
+      <div class="marking-process-node {{ 'is-wb-complete' if marking.all_wb_sent else ('is-active' if marking.can_send_wb else 'is-muted') }}">
+        <span class="marking-process-node-number">5</span><span><b>Передано WB</b><small>{{ marking.sent_wb_orders or 0 }} / {{ marking.marking_orders or 0 }}</small></span>
+      </div>
+    </div>
+
+    <div class="marking-steps">
+    <section class="marking-step {{ 'is-complete' if marking.marking_orders and not marking.to_order_total and not marking.suz_pending_runtime else ('is-ready' if marking.suz_can_create or marking.suz_pending_runtime else 'is-blocked') }}" data-step="1">
+      <div class="marking-step-number">1</div>
+      <div class="marking-step-content">
+        <div class="marking-step-head">
+          <div><span class="marking-step-kicker">Шаг 1</span><h4>Заказать КИЗы</h4><span>FBE разделит заказ по товарным группам и в реальном времени покажет PENDING → ACTIVE → получено X/Y</span></div>
+          <span class="marking-step-state {{ 'info' if marking.suz_pending_runtime else ('ok' if marking.marking_orders and not marking.to_order_total else 'muted') }}">{% if marking.suz_pending_runtime %}Ожидается {{ marking.suz_pending_runtime }}{% elif marking.marking_orders and not marking.to_order_total %}Все заказано{% else %}К заказу {{ marking.to_order_total or 0 }}{% endif %}</span>
+        </div>
+        <div class="marking-order-plan">
+          <div><span>Парфюмерия</span><b data-order-plan-group="perfumery" data-base="{{ marking.suz_order_plan.perfumery or 0 }}" data-gtins="{{ marking.suz_order_plan_gtins.perfumery or 0 }}">{{ marking.suz_order_plan.perfumery or 0 }}</b></div>
+          <div><span>Дезодоранты</span><b data-order-plan-group="chemistry" data-base="{{ marking.suz_order_plan.chemistry or 0 }}" data-gtins="{{ marking.suz_order_plan_gtins.chemistry or 0 }}">{{ marking.suz_order_plan.chemistry or 0 }}</b></div>
+        </div>
+        <div class="marking-order-simple">
+          <button type="button" class="suz-order-button step-primary-button" data-suz-create-order {% if not marking.suz_can_create %}disabled title="{{ marking.suz_order_blockers | join('; ') }}"{% endif %}>Заказать КИЗы</button>
+          <div class="marking-action-value"><span>Всего будет заказано</span><b data-order-plan-total>{{ marking.to_order_total or 0 }}</b></div>
+          <label class="marking-reserve-control"><span>Резерв на каждый GTIN</span><input type="number" min="0" max="10" value="0" data-suz-reserve></label>
+        </div>
+        {% if marking.suz_orders %}<div class="marking-live-orders">{% for order in marking.suz_orders %}<div><span><b>{{ order.oms_order_id }}</b><small>{{ order.product_group }} · {{ order.created_at }}</small></span><span class="status-chip {{ 'info' if order.remaining_total else 'ok' }}">{{ order.runtime_label or order.status }} · {{ order.received_total or 0 }}/{{ order.requested_total or 0 }}</span></div>{% endfor %}</div>{% endif %}
+        {% if marking.suz_order_blockers %}<div class="marking-step-note error">{{ marking.suz_order_blockers | join('; ') }}</div>{% endif %}
+      </div>
+    </section>
+
+    <section class="marking-step {{ 'is-complete' if marking.codes_fully_printed else ('is-ready' if marking.codes_fully_received or marking.suz_pending_runtime else 'is-blocked') }}" data-step="2">
+      <div class="marking-step-number">2</div>
+      <div class="marking-step-content">
+        <div class="marking-step-head">
+          <div><span class="marking-step-kicker">Шаг 2</span><h4>Получить и напечатать КИЗы</h4><span>Получение кодов идет автоматически. Для названия этикетки используется последние 4 цифры WB-стикера заказа.</span></div>
+          <div class="marking-step-head-actions"><span class="marking-step-state {{ 'ok' if marking.codes_fully_received else 'info' }}">Получено {{ marking.assigned_orders or 0 }} / {{ marking.marking_orders or 0 }}</span><button type="button" class="secondary" data-marking-check-status>Проверить сейчас</button></div>
+        </div>
+        <div class="marking-status-cards">{% for item in marking.status_cards %}<div class="{{ item.class }}"><span>{{ item.label }}</span><b>{{ item.count }}</b></div>{% endfor %}</div>
+        <div class="marking-print-simple">
+          <form action="/supplies/{{ supply_id }}/marking/print-30x20" method="post" target="_blank"><button type="submit" class="secondary" {% if not marking.can_print_native %}disabled title="{{ marking.print_blockers | join('; ') }}"{% endif %}>Сформировать PDF</button><small>Название + КИЗ 30×20 мм</small></form>
+          <div><button type="button" class="suz-order-button step-primary-button" data-marking-print-direct {% if not marking.can_print_direct %}disabled title="{{ marking.direct_print_blockers | join('; ') }}"{% endif %}>Моментальная печать</button><small>{{ marking.direct_printer_name or 'принтер не указан' }}</small></div>
+        </div>
+        {% if marking.print_blockers %}<div class="marking-step-note error">{{ marking.print_blockers | join('; ') }}</div>{% endif %}
+      </div>
+    </section>
+
+    <section class="marking-step {{ 'is-complete' if marking.application_report_complete else ('is-ready' if marking.can_submit_application_report or marking.chemistry_application_in_progress else 'is-blocked') }}" data-step="3" data-application-report-block>
+      <div class="marking-step-number">3</div>
+      <div class="marking-step-content">
+        <div class="marking-step-head"><div><span class="marking-step-kicker">Шаг 3</span><h4>Отчет о нанесении</h4><span>{% if marking.application_report_required %}Для дезодорантов после физического нанесения DataMatrix отчет отправляется в СУЗ и отслеживается до подтверждения{% else %}Для группы «Духи и туалетная вода» отдельная ручная отправка отчета не требуется: ЧЗ обрабатывает этот этап автоматически{% endif %}</span></div><span class="marking-step-state {{ 'ok' if marking.application_report_complete else ('info' if marking.chemistry_application_in_progress else 'muted') }}">{% if marking.application_report_complete %}Выполнено{% elif marking.chemistry_application_in_progress %}Обрабатывается{% else %}Ожидает{% endif %}</span></div>
+        {% if marking.application_report_required %}
+          <div class="marking-circulation-simple"><div><span>Дезодоранты: нанесено</span><b>{{ marking.chemistry_applied_codes or 0 }} / {{ marking.chemistry_codes or 0 }}</b></div>{% if marking.latest_utilisation_report %}<div><span>Последний отчет</span><b>{{ marking.latest_utilisation_report.status }}</b></div>{% endif %}<button type="button" class="circulation-introduce-button step-primary-button" data-marking-application-report {% if not marking.can_submit_application_report %}disabled{% endif %}>Отправить отчет о нанесении</button></div>
+        {% else %}<div class="marking-step-note ok">Парфюмерия: отдельный отчет из FBE не отправляется. Шаг считается выполненным автоматически после печати/получения кодов.</div>{% endif %}
+      </div>
+    </section>
+
+    <section class="marking-step {{ 'is-complete' if marking.all_marking_introduced else ('is-ready' if marking.can_start_introduction or marking.latest_circulation_document else 'is-blocked') }}" data-step="4" data-circulation-block>
+      <div class="marking-step-number">4</div>
+      <div class="marking-step-content">
+        <div class="marking-step-head"><div><span class="marking-step-kicker">Шаг 4</span><h4>Ввести КИЗы в оборот</h4><span>Одна команда отправляет все готовые коды и сама отслеживает документы до результата — повторно нажимать кнопку для «кусков» не нужно</span></div><span class="marking-step-state {{ 'ok' if marking.all_marking_introduced else ('info' if marking.latest_circulation_document else 'muted') }}">В обороте {{ marking.introduced_codes or 0 }} / {{ marking.marking_orders or 0 }}</span></div>
+        <div class="marking-circulation-simple"><div class="{{ 'ready' if marking.all_marking_introduced else '' }}"><span>В обороте</span><b>{{ marking.introduced_codes or 0 }} / {{ marking.marking_orders or 0 }}</b></div>{% if marking.latest_circulation_document %}<div><span>Последний документ</span><b>{{ marking.latest_circulation_document.status }}</b></div>{% endif %}<button type="button" class="circulation-introduce-button step-primary-button" data-circulation-introduce data-requires-compliance-override="{{ '1' if marking.requires_compliance_conflict_override else '0' }}" {% if not marking.can_start_introduction %}disabled title="{{ marking.circulation_hard_blockers | join('; ') }}"{% endif %}>Ввести все КИЗы в оборот</button></div>
+        {% if marking.compliance_conflicts and not marking.all_marking_introduced %}<div class="marking-conflict-override"><div><b>Повторяющийся GTIN связан с разными реквизитами</b><span>{{ marking.compliance_conflicts | join('; ') }}</span><small>Галочка снимает только локальную блокировку FBE; итоговую проверку выполняет Честный Знак.</small></div><label><input type="checkbox" data-ignore-compliance-conflicts><span>Игнорировать предупреждение и продолжить</span></label></div>{% endif %}
+        {% if marking.circulation_hard_blockers and not marking.all_marking_introduced %}<div class="marking-step-note error">{{ marking.circulation_hard_blockers | join('; ') }}</div>{% endif %}
+      </div>
+    </section>
+
+    <section class="marking-step marking-step-wb {{ 'is-wb-complete' if marking.all_wb_sent else ('is-ready' if marking.can_send_wb else 'is-blocked') }}" data-step="5">
+      <div class="marking-step-number">5</div>
+      <div class="marking-step-content"><div class="marking-step-head"><div><span class="marking-step-kicker">Шаг 5</span><h4>Передать КИЗы в WB</h4><span>Доступно только после подтвержденного ввода кодов в оборот</span></div><span class="marking-step-state {{ 'wb' if marking.all_wb_sent else ('ok' if marking.can_send_wb else 'muted') }}">Передано {{ marking.sent_wb_orders or 0 }} / {{ marking.marking_orders or 0 }}</span></div><div class="marking-step-optional-body plain"><button type="button" class="marking-wb-send-all" data-marking-send-wb-all {% if not marking.can_send_wb or marking.all_wb_sent %}disabled title="{{ marking.wb_blocker or '' }}"{% endif %}>Передать все КИЗы в WB</button>{% if marking.wb_blocker %}<span>{{ marking.wb_blocker }}</span>{% endif %}</div></div>
+    </section>
+    </div>
+  </section>
+</div>

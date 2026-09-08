@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>Экономика · FBE {{ fbe_version }}</title>
+  <link rel="icon" href="/static/icons/favicon.ico?b={{ fbe_build_id }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png?b={{ fbe_build_id }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/fbe-icon-180.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/fbe-icon-192.png?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/style.css?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/economy.css?b={{ fbe_build_id }}">
+</head>
+<body class="economy-body" data-economy-job="{{ job_id }}">
+{% set active_nav = "economy" %}
+{% set local_tabs = false %}
+{% include "partials/sidebar.html" %}
+<div class="workspace-heading" id="workspace-title" tabindex="-1"><h1>Экономика</h1></div>
+{% macro rub(value) -%}{{ "{:,.0f}".format(value or 0).replace(",", " ") }} ₽{%- endmacro %}
+{% macro pct(value) -%}{{ "{:.1f}".format(value or 0).replace(".", ",") }}%{%- endmacro %}
+{% macro qty(value) -%}{{ "{:,.0f}".format(value or 0).replace(",", " ") }}{%- endmacro %}
+{% macro qty1(value) -%}{{ "{:.1f}".format(value or 0).replace(".", ",") }}{%- endmacro %}
+{% if job_id %}<div class="banner warn" id="economy-job-state">{{ msg or 'Обновление экономики выполняется в фоне…' }}</div>{% elif msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+{% if config.mock_mode %}<div class="banner warn">MOCK MODE: используются тестовые данные.</div>{% endif %}
+
+<main class="economy-page basic-economy-page">
+  <section class="economy-status-strip card">
+    <div class="status-piece">
+      <span class="status-dot {% if token_state.statistics.can_sync and token_state.finance.can_sync and token_state.promotion.can_sync %}connected{% elif token_state.statistics.can_sync and token_state.finance.can_sync %}partial{% else %}missing{% endif %}"></span>
+      <div><small>WB API</small><strong>{% if token_state.statistics.can_sync and token_state.finance.can_sync and token_state.promotion.can_sync %}3 контура подключены{% elif token_state.statistics.can_sync and token_state.finance.can_sync %}реклама не подключена{% else %}нужна настройка{% endif %}</strong></div>
+    </div>
+    <div class="status-piece"><div><small>Локальная база</small><strong>{% if dashboard.status.local_date_from %}{{ dashboard.status.local_date_from }} - {{ dashboard.status.local_date_to }}{% else %}пока пуста{% endif %}</strong></div></div>
+    <div class="status-piece"><div><small>Последнее обновление</small><strong>{{ dashboard.status.last_updated_at or 'еще не выполнялось' }}</strong></div></div>
+    <form method="post" action="/economy/sync" class="sync-form compact-sync-form">
+      <input type="hidden" name="return_date_from" value="{{ dashboard.date_from }}">
+      <input type="hidden" name="return_date_to" value="{{ dashboard.date_to }}">
+      <button type="submit" class="primary" data-busy-text="Обновляем…" {% if not token_state.statistics.can_sync or not token_state.finance.can_sync %}disabled{% endif %}>Обновить данные с WB</button>
+    </form>
+    <details class="economy-settings-menu">
+      <summary>Настройки</summary>
+      <div class="settings-popover">
+        <div class="settings-block">
+          <strong>Подключение WB</strong>
+          <div class="compact-token-states">
+            <span>Статистика: {{ token_state.statistics.status_label }}</span>
+            <span>Финансы: {{ token_state.finance.status_label }}</span>
+            <span>Продвижение: {{ token_state.promotion.status_label }}</span>
+          </div>
+          <form method="post" action="/api/economy/tokens/check" class="inline-form">
+            <input type="hidden" name="return_date_from" value="{{ dashboard.date_from }}"><input type="hidden" name="return_date_to" value="{{ dashboard.date_to }}">
+            <button class="secondary">Проверить токен</button>
+          </form>
+          <div class="settings-form">
+            <small>Единый токен управляется через профиль компании FBE и не хранится в настройках Экономики.</small>
+            <button type="button" class="secondary" onclick="document.querySelector('.connection-profile-button')?.click()">Открыть профиль подключения</button>
+          </div>
+          <form method="post" action="/api/economy/settings" class="settings-form">
+            <input type="hidden" name="return_date_from" value="{{ dashboard.date_from }}"><input type="hidden" name="return_date_to" value="{{ dashboard.date_to }}">
+            <label><span>ID рекламных кампаний</span><input type="text" name="campaign_ids" value="{{ campaign_ids_text }}" placeholder="37958203, 38741167"></label>
+            <button class="secondary">Сохранить ID кампаний</button>
+          </form>
+          <small>FBE автоматически добавляет кампании из WB. Указанные ID закреплены и проверяются даже если временно не попали в список.</small>
+        </div>
+        <div class="settings-block">
+          <strong>Локальная история</strong>
+          <form method="post" action="/api/economy/settings" class="settings-form">
+            <input type="hidden" name="return_date_from" value="{{ dashboard.date_from }}"><input type="hidden" name="return_date_to" value="{{ dashboard.date_to }}">
+            <label><span>Начальная дата</span><input type="date" name="history_start" value="{{ history_start }}" min="2025-01-01"></label>
+            <button class="secondary">Сохранить дату</button>
+          </form>
+          <form method="post" action="/economy/sync-history" class="sync-form maintenance-form">
+            <input type="hidden" name="return_date_from" value="{{ dashboard.date_from }}"><input type="hidden" name="return_date_to" value="{{ dashboard.date_to }}">
+            <button class="danger-soft" data-busy-text="Загружаем историю…">Загрузить историю заново</button>
+          </form>
+          <small>Заказы и выкупы WB гарантированно доступны через API не более чем за последние 90 дней. Уже сохраненные старые строки FBE не удаляет.</small>
+        </div>
+        <div class="settings-block">
+          <strong>Контрольная сверка</strong>
+          <form method="post" action="/economy/sync-weekly" class="sync-form maintenance-form">
+            <input type="hidden" name="return_date_from" value="{{ dashboard.date_from }}"><input type="hidden" name="return_date_to" value="{{ dashboard.date_to }}">
+            <button class="secondary" data-busy-text="Обновляем сверку…">Обновить недельные отчеты</button>
+          </form>
+          <small>Недельные отчеты хранятся отдельно и никогда не складываются с дневными.</small>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <section class="today-command-center">
+    <article class="card today-sales-card">
+      <div class="today-section-head">
+        <div>
+          <div class="eyebrow">Сегодня · {{ dashboard.today.date_label }}</div>
+          <h2>Заказы сегодня</h2>
+          <p>Активные заказы за сегодняшний день. Отмененные позиции вынесены в отдельный красный столбец.</p>
+        </div>
+        <div class="today-refresh-note"><span class="live-pulse"></span><span>после обновления WB</span></div>
+      </div>
+
+      <div class="today-bar-chart" aria-label="Заказы, средства к выводу и отмены за сегодня">
+        <div class="today-bar-column purple-column">
+          <div class="today-bar-value"><strong>{{ rub(dashboard.today.orders_amount) }}</strong><span>{{ qty(dashboard.today.orders_qty) }} шт.</span></div>
+          <div class="today-bar-track"><div class="today-bar purple-bar" style="height:{{ dashboard.today.chart.orders_height }}%"></div></div>
+          <div class="today-bar-label"><strong>Заказы</strong><span>до скидки WB и удержаний</span></div>
+        </div>
+        <div class="today-bar-column green-column">
+          {% if dashboard.today.forecast_ready %}
+            <div class="today-bar-value"><strong>{{ rub(dashboard.today.forecast_net_amount) }}</strong><span>≈ {{ qty1(dashboard.today.forecast_qty) }} шт.</span></div>
+          {% else %}
+            <div class="today-bar-value"><strong>—</strong><span>нет базы прогноза</span></div>
+          {% endif %}
+          <div class="today-bar-track"><div class="today-bar green-bar" style="height:{{ dashboard.today.chart.forecast_height }}%"></div></div>
+          <div class="today-bar-label"><strong>Средства к выводу</strong><span>прогноз по активным заказам</span></div>
+        </div>
+        <div class="today-bar-column red-column">
+          <div class="today-bar-value"><strong>{{ rub(dashboard.today.cancel_amount) }}</strong><span>{{ qty(dashboard.today.cancel_qty) }} шт.</span></div>
+          <div class="today-bar-track"><div class="today-bar red-bar" style="height:{{ dashboard.today.chart.cancel_height }}%"></div></div>
+          <div class="today-bar-label"><strong>Отменено сегодня</strong><span>включая заказы прошлых дней</span></div>
+        </div>
+      </div>
+
+      <div class="today-forecast-basis">
+        <span><b>Выкуп:</b> {{ pct(dashboard.today.conversion_qty * 100) }}</span>
+        <span><b>К перечислению:</b> {{ pct(dashboard.today.payout_ratio * 100) }}</span>
+        <small>
+          Прогноз рассчитан по {{ qty(dashboard.today.cohort_qty) }} зрелым заказам за {{ dashboard.today.cohort_from }} - {{ dashboard.today.cohort_to }}
+          и {% if dashboard.today.payout_source == 'daily' %}дневным{% else %}недельным{% endif %} финансовым отчетам WB. Известные отмены уже исключены из базы прогноза. API не сообщает, была ли конкретная отмена отказом при получении.
+        </small>
+      </div>
+    </article>
+
+    <article class="card today-buyouts-card">
+      <div class="today-section-head compact">
+        <div><div class="eyebrow">Фактические операции</div><h2>Выкупы сегодня</h2></div>
+        <span class="buyout-count-badge">{{ qty(dashboard.today.net_buyout_qty) }} шт.</span>
+      </div>
+      <div class="today-buyout-gross">
+        <span>Сумма выкупов до WB</span>
+        <strong>{{ rub(dashboard.today.net_buyout_seller_amount) }}</strong>
+        <small>выкупы минус возвраты по цене продавца, до скидки WB/СПП и удержаний</small>
+      </div>
+      <div class="today-buyout-net">
+        <span>Средства к выводу</span>
+        <strong>{{ rub(dashboard.today.buyout_net_after_wb) }}</strong>
+        <small>{% if dashboard.today.buyout_net_mode == 'fact' %}фактическая сумма дневного финансового отчета{% else %}оперативная оценка после всей исторической нагрузки WB{% endif %}</small>
+        <div class="today-payout-foot">
+          <span>После комиссии WB · оперативный <code>forPay</code></span><b>{{ rub(dashboard.today.net_buyout_for_pay) }}</b>
+        </div>
+      </div>
+      <div class="today-buyout-details">
+        <div><span>Цена покупателя после СПП</span><strong>{{ rub(dashboard.today.net_buyout_amount) }}</strong><em>{{ qty(dashboard.today.net_buyout_qty) }} шт. чистыми</em></div>
+        <div class="negative"><span>Возвращено сегодня</span><strong>{{ qty(dashboard.today.return_qty) }} шт.</strong><em>{{ rub(dashboard.today.return_seller_amount) }} до WB</em></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="card economy-hero local-economy-hero">
+    <div><div class="eyebrow">FBE {{ fbe_version }} · экономика и реклама</div><h2>Продажи, удержания и реклама WB в одном локальном отчете</h2>
+      <p>Даты пересчитываются локально. Расход кампаний сверяется с фактической историей списаний WB Продвижения, без двойного учета.</p></div>
+    <a class="button-link success" href="/economy/export.xlsx?date_from={{ dashboard.date_from }}&date_to={{ dashboard.date_to }}">Скачать отчет XLSX</a>
+  </section>
+
+  <section class="card period-card">
+    <form method="get" action="/economy" class="economy-period-form local-period-form">
+      <label><span>Период с</span><input type="date" name="date_from" value="{{ dashboard.date_from }}"></label>
+      <label><span>по</span><input type="date" name="date_to" value="{{ dashboard.date_to }}"></label>
+      <button class="secondary">Показать</button>
+    </form>
+    <div class="quick-periods">
+      {% for label, start, end in quick_periods %}<a href="/economy?date_from={{ start }}&date_to={{ end }}">{{ label }}</a>{% endfor %}
+    </div>
+    <div class="period-explanation">Смена дат не обращается к WB и не перезагружает отчет - FBE мгновенно пересчитывает сохраненную базу.</div>
+  </section>
+
+  {% if not dashboard.quality.finance_complete %}
+    <div class="banner warn">За выбранный период нет дневных финансовых отчетов. Нажмите «Обновить данные с WB». Старые недельные отчеты намеренно не подставляются вместо дневных.</div>
+  {% elif not dashboard.quality.selected_inside_finance_coverage %}
+    <div class="banner warn">Выбранный период выходит за границы загруженных дневных отчетов: {{ dashboard.quality.daily_coverage.date_from or '—' }} - {{ dashboard.quality.daily_coverage.date_to or '—' }}. Финансовая сумма показана только по имеющимся дням.</div>
+  {% endif %}
+
+  <section class="card advertising-section">
+    <div class="section-head advertising-head">
+      <div>
+        <div class="eyebrow">Выбранный период</div>
+        <h2>Реклама и ДРР</h2>
+        <div class="hint">Расход кампаний из статистики WB сопоставляется с фактической историей списаний WB Продвижения.</div>
+      </div>
+      <div class="campaign-count"><strong>{{ dashboard.advertising.active_count }}</strong><span>активных РК</span></div>
+    </div>
+
+    {% if dashboard.advertising.ready %}
+    <div class="ad-kpi-grid">
+      <div class="ad-kpi primary-kpi"><span>Списано за рекламу</span><strong>{{ rub(dashboard.advertising.effective_spend) }}</strong><small>{{ dashboard.advertising.spend_source }}</small></div>
+      <div class="ad-kpi"><span>ДРР рекламы</span><strong>{{ pct(dashboard.advertising.drr_pct) }}</strong><small>расход / сумму заказов из рекламы</small></div>
+      <div class="ad-kpi"><span>ДРР от всех продаж</span><strong>{{ pct(dashboard.advertising.total_sales_drr_pct) }}</strong><small>расход / {{ dashboard.advertising.sales_base_source }}</small></div>
+      <div class="ad-kpi"><span>Сумма заказов из рекламы</span><strong>{{ rub(dashboard.advertising.revenue) }}</strong><small>{{ qty(dashboard.advertising.orders) }} заказов · {{ qty(dashboard.advertising.shks) }} товаров</small></div>
+    </div>
+    <div class="ad-secondary-grid">
+      <div><span>Показы</span><strong>{{ qty(dashboard.advertising.views) }}</strong></div>
+      <div><span>Клики</span><strong>{{ qty(dashboard.advertising.clicks) }}</strong></div>
+      <div><span>CTR</span><strong>{{ pct(dashboard.advertising.ctr_pct) }}</strong></div>
+      <div><span>CPC</span><strong>{{ rub(dashboard.advertising.cpc) }}</strong></div>
+      <div><span>Цена заказа</span><strong>{{ rub(dashboard.advertising.cpo) }}</strong></div>
+      <div><span>Расход на товар в заказах</span><strong>{{ rub(dashboard.advertising.cost_per_ordered_item) }}</strong></div>
+    </div>
+    <div class="ad-reconciliation">
+      <div><span>Расход по статистике кампаний</span><strong>{{ rub(dashboard.advertising.stats_spend) }}</strong></div>
+      <div><span>Фактически списано WB Продвижением</span><strong>{{ rub(dashboard.advertising.actual_spend) if dashboard.advertising.actual_spend else 'ожидается' }}</strong></div>
+      <div class="{% if dashboard.advertising.reconciliation_delta|abs > 1 %}attention{% endif %}"><span>Разница во времени учета</span><strong>{{ rub(dashboard.advertising.reconciliation_delta) }}</strong></div>
+    </div>
+
+    <div class="ad-campaign-list-head">
+      <div><strong>Самые затратные кампании</strong><small>Топ-5 по фактическому списанию или расходу статистики WB</small></div>
+      <span>{{ dashboard.advertising.campaigns_count }} всего</span>
+    </div>
+    <div class="table-scroll ad-table-wrap"><table class="unit-table ad-campaign-table sortable-table"><thead><tr>
+      <th><button type="button" class="sort-button" data-column="0" data-type="text">Кампания</button></th>
+      <th><button type="button" class="sort-button" data-column="1" data-type="text">Статус</button></th>
+      <th><button type="button" class="sort-button" data-column="2" data-type="number">Расход</button></th>
+      <th><button type="button" class="sort-button" data-column="3" data-type="number">Списано WB</button></th>
+      <th><button type="button" class="sort-button" data-column="4" data-type="number">Сумма заказов</button></th>
+      <th><button type="button" class="sort-button" data-column="5" data-type="number">Заказы</button></th>
+      <th><button type="button" class="sort-button" data-column="6" data-type="number">Товаров</button></th>
+      <th><button type="button" class="sort-button" data-column="7" data-type="number">ДРР</button></th>
+    </tr></thead><tbody>
+      {% set rows = dashboard.advertising.top_rows %}
+      {% for row in rows %}<tr>
+          <td data-sort-value="{{ row.name }}"><strong>{{ row.name }}</strong><small title="ID рекламной кампании {{ row.advert_id }}">ID {{ row.advert_id }} · {{ row.type_label }}{% if row.payment_type %} · {{ row.payment_type }}{% endif %}</small></td>
+          <td data-sort-value="{{ row.status }}"><span class="campaign-status {{ row.status_class }}">{{ row.status_label }}</span></td>
+          <td data-sort-value="{{ row.spend }}"><strong>{{ rub(row.spend) }}</strong></td>
+          <td data-sort-value="{{ row.actual_spend }}">{{ rub(row.actual_spend) if row.actual_spend else '—' }}</td>
+          <td data-sort-value="{{ row.revenue }}">{{ rub(row.revenue) }}</td>
+          <td data-sort-value="{{ row.orders }}">{{ qty(row.orders) }}</td>
+          <td data-sort-value="{{ row.shks }}">{{ qty(row.shks) }}</td>
+          <td data-sort-value="{{ row.drr_pct }}"><strong>{{ pct(row.drr_pct) }}</strong></td>
+        </tr>{% endfor %}
+    </tbody></table></div>
+    {% if dashboard.advertising.other_rows %}
+    <details class="ad-all-campaigns">
+      <summary>Показать все кампании · еще {{ dashboard.advertising.other_rows|length }}</summary>
+      <div class="table-scroll ad-table-wrap"><table class="unit-table ad-campaign-table sortable-table"><thead><tr>
+        <th><button type="button" class="sort-button" data-column="0" data-type="text">Кампания</button></th>
+        <th><button type="button" class="sort-button" data-column="1" data-type="text">Статус</button></th>
+        <th><button type="button" class="sort-button" data-column="2" data-type="number">Расход</button></th>
+        <th><button type="button" class="sort-button" data-column="3" data-type="number">Списано WB</button></th>
+        <th><button type="button" class="sort-button" data-column="4" data-type="number">Сумма заказов</button></th>
+        <th><button type="button" class="sort-button" data-column="5" data-type="number">Заказы</button></th>
+        <th><button type="button" class="sort-button" data-column="6" data-type="number">Товаров</button></th>
+        <th><button type="button" class="sort-button" data-column="7" data-type="number">ДРР</button></th>
+      </tr></thead><tbody>
+        {% set rows = dashboard.advertising.other_rows %}
+        {% for row in rows %}<tr>
+          <td data-sort-value="{{ row.name }}"><strong>{{ row.name }}</strong><small title="ID рекламной кампании {{ row.advert_id }}">ID {{ row.advert_id }} · {{ row.type_label }}{% if row.payment_type %} · {{ row.payment_type }}{% endif %}</small></td>
+          <td data-sort-value="{{ row.status }}"><span class="campaign-status {{ row.status_class }}">{{ row.status_label }}</span></td>
+          <td data-sort-value="{{ row.spend }}"><strong>{{ rub(row.spend) }}</strong></td>
+          <td data-sort-value="{{ row.actual_spend }}">{{ rub(row.actual_spend) if row.actual_spend else '—' }}</td>
+          <td data-sort-value="{{ row.revenue }}">{{ rub(row.revenue) }}</td>
+          <td data-sort-value="{{ row.orders }}">{{ qty(row.orders) }}</td>
+          <td data-sort-value="{{ row.shks }}">{{ qty(row.shks) }}</td>
+          <td data-sort-value="{{ row.drr_pct }}"><strong>{{ pct(row.drr_pct) }}</strong></td>
+        </tr>{% endfor %}
+      </tbody></table></div>
+    </details>
+    {% endif %}
+    {% else %}
+      <div class="empty-state ad-empty">Рекламные данные еще не загружены. Токен должен содержать категорию «Продвижение», затем нажмите «Обновить данные с WB».</div>
+    {% endif %}
+  </section>
+
+  <section class="basic-flow-grid">
+    <article class="card flow-card forecast-flow"><div class="flow-number">1</div><h2>Заказы · прогноз</h2>
+      <div class="basic-metric"><span>Все заказы</span><strong>{{ qty(dashboard.totals.orders_qty) }} шт.</strong><em>{{ rub(dashboard.totals.orders_amount) }}</em></div>
+      <div class="basic-metric negative"><span>Отменено</span><strong>{{ qty(dashboard.totals.cancel_qty) }} шт.</strong><em>{{ rub(dashboard.totals.cancel_amount) }}</em></div>
+      <div class="basic-metric result"><span>Активные заказы</span><strong>{{ qty(dashboard.totals.active_orders_qty) }} шт.</strong><em>{{ rub(dashboard.totals.active_orders_amount) }}</em></div>
+      <small>Оперативные данные Statistics API, локально отфильтрованные по дате заказа.</small>
+    </article>
+    <article class="card flow-card buyout-flow"><div class="flow-number">2</div><h2>Выкупы · оперативно</h2>
+      <div class="basic-metric"><span>Выкуплено</span><strong>{{ qty(dashboard.totals.buyout_qty) }} шт.</strong><em>{{ rub(dashboard.totals.buyout_amount) }}</em></div>
+      <div class="basic-metric negative"><span>Возвращено</span><strong>{{ qty(dashboard.totals.return_qty) }} шт.</strong><em>{{ rub(dashboard.totals.return_amount) }}</em></div>
+      <div class="basic-metric result"><span>Чистые выкупы</span><strong>{{ qty(dashboard.totals.net_buyout_qty) }} шт.</strong><em>{{ rub(dashboard.totals.net_buyout_amount) }}</em></div>
+      <small>Одна строка /sales соответствует одной продаже или возврату товара.</small>
+    </article>
+    <article class="card flow-card finance-flow"><div class="flow-number">3</div><h2>Финансовый факт WB</h2>
+      <div class="basic-metric"><span>Продажи по отчетам</span><strong>{{ rub(dashboard.totals.report_sales) }}</strong><em>retailAmountSum</em></div>
+      <div class="basic-metric result"><span>К перечислению</span><strong>{{ rub(dashboard.totals.bank_payment) }}</strong><em>bankPaymentSum</em></div>
+      <div class="basic-metric negative"><span>Общая разница WB</span><strong>{{ rub(dashboard.totals.wb_difference) }}</strong><em>{{ pct(dashboard.totals.wb_difference_pct) }} от продаж</em></div>
+      <small>{{ dashboard.quality.daily_reports_count }} дневных отчетов внутри выбранного периода. Недельные отчеты сюда не прибавляются.</small>
+    </article>
+    <article class="card flow-card cost-flow"><div class="flow-number">4</div><h2>Себестоимость выкупов</h2>
+      <div class="basic-metric"><span>Чистые выкупы</span><strong>{{ qty(dashboard.totals.net_buyout_qty) }} шт.</strong></div>
+      <div class="basic-metric"><span>Себестоимость</span><strong>{{ rub(dashboard.totals.cogs) }}</strong></div>
+      <div class="coverage-line"><span>Покрытие себестоимостью</span><strong>{{ pct(dashboard.quality.cost_coverage_pct) }}</strong><progress max="100" value="{{ dashboard.quality.cost_coverage_pct }}"></progress></div>
+      {% if dashboard.quality.can_show_remaining %}<div class="basic-metric result"><span>После WB и себестоимости</span><strong>{{ rub(dashboard.totals.remaining_after_wb_and_cogs) }}</strong><em>не прибыль: без налога и постоянных расходов</em></div>
+      {% else %}<div class="basic-warning">Итоговый остаток скрыт: нужны дневные финансы и заполненная себестоимость всех сопоставленных выкупов.</div>{% endif %}
+    </article>
+  </section>
+
+  <section class="card reconciliation-card">
+    <div class="section-head"><div><h2>Контроль локальных данных</h2><div class="hint">Все показатели выше пересчитываются без повторного запроса к WB.</div></div></div>
+    <div class="reconciliation-grid">
+      <div><span>Заказы в периоде</span><strong>{{ dashboard.quality.orders_rows }}</strong><small>локальных строк</small></div>
+      <div><span>Продажи и возвраты</span><strong>{{ dashboard.quality.sales_rows }}</strong><small>локальных строк</small></div>
+      <div><span>Дневные отчеты</span><strong>{{ dashboard.quality.daily_reports_count }}</strong><small>{{ dashboard.quality.daily_coverage.date_from or '—' }} - {{ dashboard.quality.daily_coverage.date_to or '—' }}</small></div>
+      <div><span>Недельная сверка</span><strong>{{ dashboard.quality.weekly_reports_count }}</strong><small>не участвует в сумме периода</small></div>
+      <div><span>Рекламная статистика</span><strong>{{ dashboard.quality.ads_rows }}</strong><small>{{ dashboard.quality.ads_coverage.date_from or '—' }} - {{ dashboard.quality.ads_coverage.date_to or '—' }}</small></div>
+      <div><span>Сопоставлено с каталогом</span><strong>{{ pct(dashboard.quality.catalog_match_pct) }}</strong><small>{{ qty(dashboard.quality.catalog_matched_units) }} из {{ qty(dashboard.quality.cost_transaction_units) }} единиц</small></div>
+      <div><span>Покрыто себестоимостью</span><strong>{{ pct(dashboard.quality.cost_coverage_pct) }}</strong><small>{{ qty(dashboard.quality.cost_covered_units) }} из {{ qty(dashboard.quality.cost_transaction_units) }} единиц</small></div>
+    </div>
+    {% if dashboard.quality.missing_cost_articles %}<div class="banner warn">Нет себестоимости: {{ dashboard.quality.missing_cost_articles|join(', ') }}</div>{% endif %}
+    {% if dashboard.quality.unmatched_articles %}<div class="banner error">Не сопоставлены с каталогом: {{ dashboard.quality.unmatched_articles|join(', ') }}</div>{% endif %}
+  </section>
+
+  <section class="card sku-buyouts-card">
+    <div class="section-head"><div><h2>Выкупы и себестоимость по каталогу</h2><div class="hint">Сортировка выполняется локально в браузере.</div></div></div>
+    <div class="table-scroll"><table class="unit-table sortable-table"><thead><tr>
+      <th><button type="button" class="sort-button" data-column="0" data-type="text">Товар</button></th>
+      <th><button type="button" class="sort-button" data-column="1" data-type="number">Выкуплено</button></th>
+      <th><button type="button" class="sort-button" data-column="2" data-type="number">Возвраты</button></th>
+      <th><button type="button" class="sort-button" data-column="3" data-type="number">Чистые</button></th>
+      <th><button type="button" class="sort-button" data-column="4" data-type="number">Сумма</button></th>
+      <th><button type="button" class="sort-button" data-column="5" data-type="number">Себестоимость ед.</button></th>
+      <th><button type="button" class="sort-button" data-column="6" data-type="number">Себестоимость</button></th>
+    </tr></thead><tbody>
+      {% for row in dashboard.rows %}<tr>
+        <td data-sort-value="{{ row.title }}"><strong>{{ row.title }}</strong><small>{{ row.seller_article }}{% if row.volume %} · {{ row.volume }}{% endif %}</small></td>
+        <td data-sort-value="{{ row.buyout_qty }}">{{ qty(row.buyout_qty) }}</td><td data-sort-value="{{ row.return_qty }}">{{ qty(row.return_qty) }}</td>
+        <td data-sort-value="{{ row.net_qty }}">{{ qty(row.net_qty) }}</td><td data-sort-value="{{ row.net_amount }}">{{ rub(row.net_amount) }}</td>
+        <td data-sort-value="{{ row.cost_price_rub }}">{{ rub(row.cost_price_rub) if row.cost_ready else 'не задана' }}</td><td data-sort-value="{{ row.cogs }}">{{ rub(row.cogs) }}</td>
+      </tr>{% else %}<tr><td colspan="7" class="empty-state">За выбранный период нет выкупов, сопоставленных с каталогом.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+
+  <details class="card reports-details">
+    <summary>Дневные отчеты, вошедшие в расчет · {{ dashboard.report_rows|length }}</summary>
+    <div class="table-scroll"><table class="unit-table"><thead><tr><th>Дата</th><th>Тип</th><th>Продажи</th><th>К перечислению</th><th>Разница WB</th></tr></thead><tbody>
+      {% for row in dashboard.report_rows %}<tr><td>{{ row.date_from }}{% if row.date_to and row.date_to != row.date_from %} - {{ row.date_to }}{% endif %}</td><td>{{ row.report_type }}</td><td>{{ rub(row.retail_amount_sum) }}</td><td>{{ rub(row.bank_payment_sum) }}</td><td>{{ rub((row.retail_amount_sum or 0) - (row.bank_payment_sum or 0)) }}</td></tr>
+      {% else %}<tr><td colspan="5" class="empty-state">Дневных отчетов в периоде нет.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </details>
+
+  <details class="card reports-details">
+    <summary>Недельные отчеты для сверки · {{ dashboard.weekly_report_rows|length }}</summary>
+    <p class="hint">Эти строки показаны только для контроля. Они не складываются с дневными отчетами и не меняют карточки выше.</p>
+    <div class="table-scroll"><table class="unit-table"><thead><tr><th>Период</th><th>Тип</th><th>Продажи</th><th>К перечислению</th></tr></thead><tbody>
+      {% for row in dashboard.weekly_report_rows %}<tr><td>{{ row.date_from }} - {{ row.date_to }}</td><td>{{ row.report_type }}</td><td>{{ rub(row.retail_amount_sum) }}</td><td>{{ rub(row.bank_payment_sum) }}</td></tr>
+      {% else %}<tr><td colspan="4" class="empty-state">Недельная сверка не загружена.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </details>
+</main>
+<script src="/static/economy.js?b={{ fbe_build_id }}"></script>
+<script src="/static/connections.js?b={{ fbe_build_id }}"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>FBE {{ fbe_version }} — PDF-миксер</title>
+  <link rel="icon" href="/static/icons/favicon.ico?b={{ fbe_build_id }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png?b={{ fbe_build_id }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/fbe-icon-180.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/fbe-icon-192.png?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/style.css?b={{ fbe_build_id }}">
+</head>
+<body>
+{% set active_nav = "wb" %}
+{% set local_tabs = false %}
+{% include "partials/sidebar.html" %}
+<div class="workspace-heading" id="workspace-title" tabindex="-1"><h1>PDF-миксер</h1><a href="/supplies/{{ supply_id }}">Поставка {{ supply_id }}</a></div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+
+<section class="card compact">
+  <h2>Склеить WB PDF + BarTender PDF</h2>
+  <p class="hint">
+    Порядок будет: WB-страница 1 → BarTender-страница 1 → WB-страница 2 → BarTender-страница 2.
+    Файлы должны быть в одинаковом порядке и желательно с одинаковым числом страниц.
+  </p>
+
+  <form method="post" action="/supplies/{{ supply_id }}/mix-pdf" enctype="multipart/form-data" class="mixer-form">
+    <label class="field-label">1. PDF с WB-стикерами / QR-кодами</label>
+    <input type="file" name="wb_pdf" accept="application/pdf,.pdf" required>
+
+    <label class="field-label">2. PDF из BarTender с вашими этикетками</label>
+    <input type="file" name="bartender_pdf" accept="application/pdf,.pdf" required>
+
+    <button type="submit" class="primary wide">Сформировать единую ленту</button>
+  </form>
+</section>
+
+<section class="card compact">
+  <h2>Правильный порядок действий</h2>
+  <ol class="steps">
+    <li>В поставке нажми <strong>PDF WB-стикеров</strong> и сохрани файл.</li>
+    <li>Нажми <strong>CSV для BarTender</strong> — FBE запишет <code>data/print/internal_label.csv</code> в том же порядке.</li>
+    <li>В BarTender распечатай/экспортируй внутренние этикетки в PDF.</li>
+    <li>Загрузи оба PDF сюда и получи общую ленту.</li>
+  </ol>
+</section>
+<script src="/static/connections.js?b={{ fbe_build_id }}"></script>
+</body>
+</html>

@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>FBE {{ fbe_version }} — Честный Знак</title>
+  <link rel="icon" href="/static/icons/favicon.ico?b={{ fbe_build_id }}" sizes="any">
+  <link rel="stylesheet" href="/static/style.css?b={{ fbe_build_id }}">
+</head>
+<body class="global-marking-page">
+{% set active_nav = "marking" %}
+{% set local_tabs = false %}
+{% include "partials/sidebar.html" %}
+<div class="workspace-heading" id="workspace-title" tabindex="-1"><h1>Честный Знак</h1></div>
+
+{% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+
+<main class="global-marking-main marking-command-center marking-global-v838">
+  <details class="card marking-global-settings">
+    <summary>
+      <span><b>Настройка подключения</b><small>OMS, SUZ Connection ID, ИНН и УКЭП</small></span>
+      <span class="connection-state {{ 'ok' if suz_status.ready else 'warn' }}" data-global-connection-state>
+        <i></i>{{ 'Подключено' if suz_status.ready else 'Требует настройки' }}
+      </span>
+    </summary>
+    <div class="marking-global-settings-body" data-global-settings>
+      <div class="marking-global-legal-grid">
+        <label><span>OMS ID</span><input type="text" value="{{ legal_settings.oms_id }}" data-global-oms-id autocomplete="off"></label>
+        <label><span>SUZ Connection ID</span><input type="text" value="{{ legal_settings.connection_id }}" data-global-connection-id autocomplete="off"></label>
+        <label><span>ИНН производителя</span><input type="text" value="{{ legal_settings.participant_inn }}" data-global-participant-inn maxlength="12" inputmode="numeric"></label>
+        <label><span>Дата производства</span><input type="date" value="{{ legal_settings.production_date }}" readonly></label>
+      </div>
+      <div class="marking-global-settings-actions">
+        <button type="button" class="secondary" data-global-suz-test>Проверить подключение</button>
+        <button type="button" class="secondary" data-global-load-certificates>Найти УКЭП</button>
+        <select data-global-certificate-select disabled><option value="">Сертификат УКЭП</option></select>
+        <button type="button" class="secondary" data-global-save-certificate disabled>Использовать УКЭП</button>
+        <button type="button" data-global-save-legal>Сохранить настройки</button>
+      </div>
+      <div class="marking-global-inline-message" data-global-settings-message></div>
+    </div>
+  </details>
+
+  <section class="card marking-global-balance" aria-label="Баланс КИЗ">
+    <div class="marking-global-balance-title">
+      <span class="marking-global-kicker">Оплата кодов</span>
+      <b>Баланс КИЗ</b>
+      <small>Денежный остаток проверяется в ЛК Честного Знака; FBE показывает текущую потребность.</small>
+    </div>
+    <div class="marking-global-balance-metrics">
+      <div><span>К заказу сейчас</span><b data-global-balance-total>…</b></div>
+      <div><span>Парфюмерия</span><b data-global-order-perfumery>…</b></div>
+      <div><span>Дезодоранты</span><b data-global-order-chemistry>…</b></div>
+    </div>
+    <a class="secondary marking-balance-link" href="https://markirovka.crpt.ru/" target="_blank" rel="noopener noreferrer">Открыть ЛК ЧЗ</a>
+  </section>
+
+  <section class="global-marking-summary compact marking-global-stage-summary" aria-live="polite">
+    <div class="stage-summary-card is-complete" data-global-summary="supplies"><span>Поставки</span><b>{{ supplies|length }}</b><small>в работе</small></div>
+    <div class="stage-summary-card" data-global-summary="required"><span>Требуется КИЗ</span><b data-global-marking-required>…</b><small>по активным поставкам</small></div>
+    <div class="stage-summary-card" data-global-summary="introduced"><span>В обороте</span><b data-global-introduced>…</b><small data-global-introduced-caption>ожидает этапа 4</small></div>
+    <div class="stage-summary-card" data-global-summary="wb"><span>Передано WB</span><b data-global-sent-wb>…</b><small data-global-wb-caption>ожидает этапа 5</small></div>
+  </section>
+
+  <section class="card marking-global-current-status">
+    <div class="marking-global-status-copy">
+      <span class="marking-global-kicker">Real-time статус</span>
+      <div class="marking-global-status-line"><b data-global-current-status>Загружаю данные…</b><span data-global-status-detail></span></div>
+      <div class="marking-global-status-track" data-global-status-track>Состояния СУЗ и True API обновляются автоматически, пока есть незавершенная операция.</div>
+    </div>
+    <button type="button" class="marking-status-refresh" data-global-status-refresh>↻ Проверить сейчас</button>
+  </section>
+
+  <section class="marking-global-flow marking-global-flow-v836" aria-label="Общий процесс Честного Знака">
+    <article class="card marking-global-action-card" data-action-card="order" data-step-state="blocked">
+      <div class="marking-global-action-head">
+        <span class="step-no">1</span>
+        <div><span class="step-kicker">Шаг 1</span><b>Заказать КИЗы</b><small>СУЗ: заказ → PENDING → ACTIVE → получение кодов</small></div>
+        <span class="global-step-status" data-global-step-status="order">Ожидает</span>
+      </div>
+      <div class="marking-global-order-plan">
+        <div><span>Парфюмерия</span><b data-global-step-perfumery>…</b></div>
+        <div><span>Дезодоранты</span><b data-global-step-chemistry>…</b></div>
+      </div>
+      <div class="global-step-live" data-global-step-live="order">Загружаю потребность…</div>
+      <details class="marking-global-action-details">
+        <summary>Показать, что будет заказано</summary>
+        <div class="compact-action-table"><table><thead><tr><th>Поставка</th><th>Артикул</th><th>GTIN</th><th>Нужно</th><th>Не хватает</th></tr></thead><tbody data-global-order-rows><tr><td colspan="5">Загрузка…</td></tr></tbody></table></div>
+        <label class="marking-global-reserve">Резерв на каждый GTIN <input type="number" min="0" max="10" value="0" data-global-reserve></label>
+      </details>
+      <button type="button" class="primary-action global-step-button" data-global-marking-action="order">Заказать КИЗы</button>
+    </article>
+
+    <article class="card marking-global-action-card" data-action-card="print" data-step-state="blocked">
+      <div class="marking-global-action-head">
+        <span class="step-no">2</span>
+        <div><span class="step-kicker">Шаг 2</span><b>Получить и печатать</b><small>Коды подтягиваются автоматически; затем печать 30×20</small></div>
+        <span class="global-step-status" data-global-step-status="print">Ожидает</span>
+      </div>
+      <div class="global-step-metrics two">
+        <div><span>Получено</span><b data-global-assigned>…</b></div>
+        <div><span>Напечатано</span><b data-global-printed-ratio>…</b></div>
+      </div>
+      <div class="global-step-live" data-global-step-live="print">Следующий этап откроется после получения КИЗов.</div>
+      <div class="marking-global-print-choice">
+        <button type="button" class="primary-action global-step-button" data-global-marking-action="print">Моментальная печать</button>
+        <form method="post" action="/marking/print-30x20" target="_blank"><button type="submit" class="secondary" data-global-print-pdf>Сформировать PDF</button></form>
+      </div>
+    </article>
+
+    <article class="card marking-global-action-card" data-action-card="report" data-step-state="blocked">
+      <div class="marking-global-action-head">
+        <span class="step-no">3</span>
+        <div><span class="step-kicker">Шаг 3</span><b>Отчет о нанесении</b><small>Дезодоранты — отдельный отчет; парфюмерия — автоматически ЧЗ</small></div>
+        <span class="global-step-status" data-global-step-status="report">Ожидает</span>
+      </div>
+      <div class="global-step-metrics two">
+        <div><span>Нужно отчета</span><b data-global-chemistry-report>…</b></div>
+        <div><span>Нанесено</span><b data-global-applied-ratio>…</b></div>
+      </div>
+      <div class="global-step-live" data-global-step-live="report">Для чистой парфюмерной поставки этот этап пройдет автоматически.</div>
+      <button type="button" class="primary-action global-step-button" data-global-marking-action="report">Отправить отчет</button>
+    </article>
+
+    <article class="card marking-global-action-card" data-action-card="introduce" data-step-state="blocked">
+      <div class="marking-global-action-head">
+        <span class="step-no">4</span>
+        <div><span class="step-kicker">Шаг 4</span><b>Ввести в оборот</b><small>Одна команда для всех готовых КИЗов; FBE сам отслеживает документы</small></div>
+        <span class="global-step-status" data-global-step-status="introduce">Ожидает</span>
+      </div>
+      <div class="global-step-metrics one"><div><span>В обороте</span><b data-global-introduced-card>…</b></div></div>
+      <div class="global-step-live" data-global-step-live="introduce">Заблокировано до завершения шага 3.</div>
+      <button type="button" class="primary-action global-step-button" data-global-marking-action="introduce">Ввести все готовые КИЗы</button>
+    </article>
+
+    <article class="card marking-global-action-card wb-stage" data-action-card="wb" data-step-state="blocked">
+      <div class="marking-global-action-head">
+        <span class="step-no">5</span>
+        <div><span class="step-kicker">Шаг 5</span><b>Передать WB</b><small>Только КИЗы с подтвержденным статусом «В обороте»</small></div>
+        <span class="global-step-status" data-global-step-status="wb">Ожидает</span>
+      </div>
+      <div class="global-step-metrics one"><div><span>Передано</span><b data-global-sent-wb-card>…</b></div></div>
+      <div class="global-step-live" data-global-step-live="wb">Заблокировано до полного ввода КИЗов в оборот.</div>
+      <button type="button" class="primary-action global-step-button" data-global-marking-action="wb">Передать КИЗы WB</button>
+    </article>
+  </section>
+
+  <details class="card marking-global-supply-details">
+    <summary><span><b>Поставки и подробности</b><small>Диагностика конкретной поставки, GTIN, заказов СУЗ и документов</small></span><span>{{ supplies|length }}</span></summary>
+    <div class="global-marking-supplies">
+      {% for s in supplies %}
+        <details class="global-marking-supply">
+          <summary>
+            <span><b>{{ s.name or 'Поставка' }}</b><small><code>{{ s.id }}</code> · {{ s.order_count }} заданий</small></span>
+            <span class="badge {{ s.fbe_status_class }}">{{ s.fbe_status }}</span>
+          </summary>
+          <div class="global-marking-shell" data-marking-shell data-global-marking-shell data-supply-id="{{ s.id }}" data-supply-name="{{ s.name or s.id }}" data-marking-url="/supplies/{{ s.id }}/marking-needs"><div class="marking-needs-loading">Загружаю данные поставки…</div></div>
+        </details>
+      {% else %}<div class="marking-empty-state">Активных поставок на сборке нет.</div>{% endfor %}
+    </div>
+  </details>
+
+  <div class="marking-global-progress" data-global-marking-message>Загружаю данные поставок…</div>
+</main>
+
+<script src="/static/app.js?b={{ fbe_build_id }}"></script>
+<script>
+(function () {
+  const message = document.querySelector('[data-global-marking-message]');
+  const shells = () => Array.from(document.querySelectorAll('[data-global-marking-shell]'));
+  const loadedContents = () => shells().map(s => s.querySelector('[data-marking-needs-content]')).filter(Boolean);
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let autoWatchTimer = null;
+  let autoWatchCycles = 0;
+  let statusJobRunning = false;
+
+  function n(content, key) { return Number(content?.dataset?.[key] || 0); }
+  function yes(content, key) { return content?.dataset?.[key] === '1'; }
+  function put(sel,val){ const el=document.querySelector(sel); if(el) el.textContent=val; }
+  function setMessage(text, kind='') {
+    if (!message) return;
+    message.textContent = text || '';
+    message.classList.toggle('error', kind === 'error');
+  }
+
+  function updateOrderRows() {
+    const target = document.querySelector('[data-global-order-rows]');
+    if (!target) return;
+    target.replaceChildren();
+    let rows = 0;
+    for (const shell of shells()) {
+      const supplyName = shell.dataset.supplyName || 'Поставка';
+      const content = shell.querySelector('[data-marking-needs-content]');
+      if (!content) continue;
+      content.querySelectorAll('.marking-demand-table tbody tr').forEach(source => {
+        const cells = source.querySelectorAll('td');
+        if (cells.length < 6) return;
+        const missing = Number((cells[5].textContent || '').trim() || 0);
+        if (missing <= 0) return;
+        const tr = document.createElement('tr');
+        [supplyName, cells[1].querySelector('small')?.textContent?.trim() || cells[1].textContent.trim(), cells[2].textContent.trim(), cells[3].textContent.trim(), String(missing)].forEach(value => {
+          const td = document.createElement('td'); td.textContent = value; tr.append(td);
+        });
+        target.append(tr); rows += 1;
+      });
+    }
+    if (!rows) {
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td colspan="5">Недостающих кодов нет</td>';
+      target.append(tr);
+    }
+  }
+
+  function setSummaryState(name, state) {
+    const el=document.querySelector(`[data-global-summary="${name}"]`);
+    if (!el) return;
+    el.classList.remove('is-complete','is-purple','is-active','is-muted');
+    if (state) el.classList.add(state);
+  }
+
+  function setStepState(kind, state, label, liveText, enabled) {
+    const card=document.querySelector(`[data-action-card="${kind}"]`);
+    if (!card) return;
+    card.dataset.stepState=state;
+    const chip=card.querySelector(`[data-global-step-status="${kind}"]`);
+    if (chip) chip.textContent=label;
+    const live=card.querySelector(`[data-global-step-live="${kind}"]`);
+    if (live && liveText) live.textContent=liveText;
+    const button=card.querySelector(`[data-global-marking-action="${kind}"]`);
+    if (button) button.disabled=!enabled;
+    if (kind==='print') {
+      const pdf=card.querySelector('[data-global-print-pdf]');
+      if (pdf) pdf.disabled = state==='blocked';
+    }
+  }
+
+  function updateTotals() {
+    const contents = loadedContents();
+    const relevant = contents.filter(c => n(c,'markingRequired') > 0);
+    const totals = contents.reduce((acc, c) => {
+      acc.required += n(c,'markingRequired'); acc.assigned += n(c,'markingAssigned'); acc.toOrder += n(c,'markingToOrder');
+      acc.printed += n(c,'markingPrinted'); acc.applied += n(c,'markingApplied'); acc.introduced += n(c,'markingIntroduced');
+      acc.sent += n(c,'markingSentWb'); acc.processing += n(c,'markingProcessing'); acc.chemistry += n(c,'markingChemistry');
+      acc.perfumeryPlan += n(c,'markingOrderPerfumery'); acc.chemistryPlan += n(c,'markingOrderChemistry');
+      acc.perfumeryGtins += n(c,'markingOrderPerfumeryGtins'); acc.chemistryGtins += n(c,'markingOrderChemistryGtins');
+      if (yes(c,'markingChemistryNeedsReport')) acc.chemistryReport += n(c,'markingChemistryPending');
+      if (yes(c,'markingChemistryReportInProgress')) acc.reportInProgress += 1;
+      if (c.dataset.globalCanOrder==='1') acc.canOrder += 1;
+      if (c.dataset.globalCanPrint==='1') acc.canPrint += 1;
+      if (c.dataset.globalCanIntroduce==='1') acc.canIntroduce += 1;
+      if (c.dataset.globalCanSendWb==='1') acc.canWb += 1;
+      if (yes(c,'markingApplicationReportRequired')) acc.reportRequiredSupplies += 1;
+      if (yes(c,'markingApplicationReportComplete')) acc.reportCompleteSupplies += 1;
+      return acc;
+    }, {required:0,assigned:0,toOrder:0,printed:0,applied:0,introduced:0,sent:0,processing:0,chemistry:0,chemistryReport:0,perfumeryPlan:0,chemistryPlan:0,reportInProgress:0,canOrder:0,canPrint:0,canIntroduce:0,canWb:0,reportRequiredSupplies:0,reportCompleteSupplies:0,perfumeryGtins:0,chemistryGtins:0});
+
+    const all = (key) => relevant.length > 0 && relevant.every(c => yes(c,key));
+    const codesReceived = all('markingCodesFullyReceived');
+    const codesPrinted = all('markingCodesFullyPrinted');
+    const reportsComplete = relevant.length > 0 && relevant.every(c => yes(c,'markingApplicationReportComplete'));
+    const introducedComplete = all('markingAllIntroduced');
+    const wbComplete = all('markingAllWbSent');
+
+    put('[data-global-marking-required]', totals.required);
+    put('[data-global-introduced]', totals.introduced);
+    put('[data-global-sent-wb]', totals.sent);
+    put('[data-global-introduced-card]', `${totals.introduced} / ${totals.required}`);
+    put('[data-global-sent-wb-card]', `${totals.sent} / ${totals.required}`);
+    put('[data-global-assigned]', `${totals.assigned} / ${totals.required}`);
+    put('[data-global-printed-ratio]', `${totals.printed} / ${totals.required}`);
+    put('[data-global-applied-ratio]', `${totals.applied} / ${totals.required}`);
+    const reserve=Math.max(0,Math.min(10,Number(document.querySelector('[data-global-reserve]')?.value || 0)));
+    const perfumeryWithReserve=totals.perfumeryPlan + reserve * totals.perfumeryGtins;
+    const chemistryWithReserve=totals.chemistryPlan + reserve * totals.chemistryGtins;
+    const orderWithReserve=perfumeryWithReserve + chemistryWithReserve;
+    put('[data-global-chemistry-report]', totals.chemistryReport);
+    put('[data-global-balance-total]', orderWithReserve);
+    put('[data-global-order-perfumery]', perfumeryWithReserve);
+    put('[data-global-order-chemistry]', chemistryWithReserve);
+    put('[data-global-step-perfumery]', perfumeryWithReserve);
+    put('[data-global-step-chemistry]', chemistryWithReserve);
+    put('[data-global-introduced-caption]', introducedComplete ? 'этап завершен' : `подтверждено ${totals.introduced}/${totals.required}`);
+    put('[data-global-wb-caption]', wbComplete ? 'этап завершен' : `передано ${totals.sent}/${totals.required}`);
+
+    setSummaryState('required', totals.required ? 'is-active' : 'is-muted');
+    setSummaryState('introduced', introducedComplete ? 'is-complete' : 'is-muted');
+    setSummaryState('wb', wbComplete ? 'is-purple' : 'is-muted');
+
+    if (!totals.required) {
+      setStepState('order','complete','Не требуется','В активных поставках нет товаров, требующих КИЗ.',false);
+      setStepState('print','complete','Не требуется','Печатать нечего.',false);
+      setStepState('report','complete','Не требуется','Отчет не требуется.',false);
+      setStepState('introduce','complete','Не требуется','Ввод в оборот не требуется.',false);
+      setStepState('wb','complete','Не требуется','Передавать КИЗы WB не требуется.',false);
+      put('[data-global-current-status]','Маркировка не требуется');
+      put('[data-global-status-detail]','В активных поставках нет КИЗ');
+      updateOrderRows();
+      return {...totals, codesReceived, codesPrinted, reportsComplete, introducedComplete, wbComplete};
+    }
+
+    const orderComplete = totals.toOrder <= 0 && (codesReceived || totals.processing > 0 || totals.assigned >= totals.required);
+    if (totals.processing > 0 && !codesReceived) {
+      setStepState('order','working','В процессе',`СУЗ обрабатывает заказ: получено ${totals.assigned}/${totals.required}. FBE продолжает проверку автоматически.`,false);
+    } else if (orderComplete) {
+      setStepState('order','complete','Готово',`Все необходимые КИЗы заказаны. Получено ${totals.assigned}/${totals.required}.`,false);
+    } else if (totals.canOrder > 0) {
+      setStepState('order','active','Можно выполнить',`К заказу ${orderWithReserve}: парфюмерия ${perfumeryWithReserve}, дезодоранты ${chemistryWithReserve}.`,true);
+    } else {
+      setStepState('order','blocked','Заблокировано',`Не хватает ${totals.toOrder} КИЗ. Проверьте OMS/GTIN и настройки подключения.`,false);
+    }
+
+    if (codesPrinted) setStepState('print','complete','Готово',`Напечатано ${totals.printed}/${totals.required}.`,false);
+    else if (totals.canPrint > 0 && (orderComplete || codesReceived)) setStepState('print','active','Можно выполнить',`Получено ${totals.assigned}/${totals.required}; напечатано ${totals.printed}/${totals.required}.`,true);
+    else if (totals.processing > 0) setStepState('print','waiting','Ожидаем КИЗы',`Коды поступают: ${totals.assigned}/${totals.required}.`,false);
+    else setStepState('print','blocked','Шаг закрыт','Сначала завершите заказ и получение КИЗов.',false);
+
+    if (reportsComplete && codesPrinted) {
+      const autoOnly = totals.reportRequiredSupplies === 0;
+      setStepState('report','complete',autoOnly?'Автоматически':'Готово',autoOnly?'Парфюмерия: отдельный отчет FBE не отправляет — этап обработан Честным Знаком автоматически.':`Отчеты о нанесении подтверждены для всех необходимых поставок.`,false);
+    } else if (totals.reportInProgress > 0) {
+      setStepState('report','working','Обрабатывается',`Честный Знак обрабатывает отчет. Нанесено ${totals.applied}/${totals.required}.`,false);
+    } else if (codesPrinted && totals.chemistryReport > 0) {
+      setStepState('report','active','Можно выполнить',`Для дезодорантов ожидают отчета ${totals.chemistryReport} КИЗ.`,true);
+    } else if (codesPrinted && totals.reportRequiredSupplies === 0) {
+      setStepState('report','complete','Автоматически','Парфюмерия: ручной отчет не требуется.',false);
+    } else {
+      setStepState('report','blocked','Шаг закрыт','Сначала получите и физически напечатайте КИЗы.',false);
+    }
+
+    if (introducedComplete) setStepState('introduce','complete','Готово',`Все КИЗы подтверждены в обороте: ${totals.introduced}/${totals.required}.`,false);
+    else if (totals.canIntroduce > 0 && reportsComplete) setStepState('introduce','active','Можно выполнить',`Готово к вводу. Сейчас в обороте ${totals.introduced}/${totals.required}.`,true);
+    else if (totals.processing > 0 && totals.introduced > 0) setStepState('introduce','working','Обрабатывается',`ЧЗ подтверждает документы: ${totals.introduced}/${totals.required} уже в обороте.`,false);
+    else setStepState('introduce','blocked','Шаг закрыт','Сначала завершите отчет о нанесении / автоматический этап ЧЗ.',false);
+
+    if (wbComplete) setStepState('wb','complete','Передано',`Все КИЗы переданы WB: ${totals.sent}/${totals.required}.`,false);
+    else if (totals.canWb > 0 && introducedComplete) setStepState('wb','active','Можно выполнить',`В обороте ${totals.introduced}/${totals.required}. Можно передать КИЗы WB.`,true);
+    else setStepState('wb','blocked','Шаг закрыт','Сначала необходимо полностью подтвердить ввод КИЗов в оборот.',false);
+
+    let status='Ожидается заказ кодов', detail=`Не хватает ${totals.toOrder}`;
+    if (wbComplete) { status='Маркировка завершена'; detail=`Передано WB ${totals.sent}/${totals.required}`; }
+    else if (introducedComplete) { status='Все КИЗы в обороте'; detail=`Можно передавать WB · ${totals.introduced}/${totals.required}`; }
+    else if (totals.processing > 0) { status='Операция выполняется'; detail=`Сервер обрабатывает ${totals.processing} КИЗ`; }
+    else if (reportsComplete && codesPrinted) { status='Можно вводить в оборот'; detail=`Напечатано ${totals.printed}/${totals.required}`; }
+    else if (totals.chemistryReport > 0 && codesPrinted) { status='Нужен отчет о нанесении'; detail=`Дезодоранты: ${totals.chemistryReport}`; }
+    else if (codesReceived && !codesPrinted) { status='КИЗы готовы к печати'; detail=`Получено ${totals.assigned}/${totals.required}`; }
+    else if (totals.assigned > 0) { status='КИЗы поступают'; detail=`Получено ${totals.assigned}/${totals.required}`; }
+    put('[data-global-current-status]', status);
+    put('[data-global-status-detail]', detail);
+    updateOrderRows();
+    document.body.dataset.markingProcessing = String(totals.processing);
+    return {...totals, codesReceived, codesPrinted, reportsComplete, introducedComplete, wbComplete};
+  }
+
+  async function refreshAll(silent=false) {
+    const list = shells();
+    if (!list.length) { updateTotals(); return {ok:0, errors:[]}; }
+    if (!silent) setMessage('Читаю локальное состояние поставок…');
+    const results = await Promise.allSettled(list.map(shell => refreshMarkingShell(shell, 'Обновляю…')));
+    const errors=[]; let ok=0;
+    results.forEach(r => r.status==='fulfilled' ? ok++ : errors.push(r.reason?.message || String(r.reason)));
+    updateTotals();
+    if (!silent) setMessage(errors.length ? `Загружено ${ok}/${list.length} · ${errors.length} ошибок` : `Актуально · ${ok} поставок`, errors.length?'error':'');
+    return {ok, errors};
+  }
+
+  async function pollJob(jobId, {auto=false}={}) {
+    if (!jobId) return;
+    statusJobRunning = true;
+    const button = document.querySelector('[data-global-status-refresh]');
+    if (button) { button.disabled=true; button.classList.add('is-busy'); }
+    let lastLocalRefresh = 0;
+    try {
+      while (true) {
+        const job = await markingApiRequest(`/api/jobs/${encodeURIComponent(jobId)}`);
+        const total = Number(job.total || 0), progress = Number(job.progress || 0);
+        const prefix = total ? `${Math.min(progress,total)}/${total} · ` : '';
+        setMessage(prefix + (job.message || 'Проверяю серверы…'), job.state==='error'?'error':'');
+        put('[data-global-status-track]', job.message || 'Операция выполняется…');
+        const now = Date.now();
+        if (now - lastLocalRefresh > 1200) { await refreshAll(true); lastLocalRefresh = now; }
+        if (job.state === 'done' || job.state === 'error') {
+          await refreshAll(true);
+          const result = job.result || {};
+          const finalText = job.state==='error' ? (job.error || job.message) : (result.message || job.message || 'Статусы обновлены');
+          setMessage(finalText, job.state==='error'?'error':'');
+          put('[data-global-status-track]', finalText);
+          break;
+        }
+        await sleep(700);
+      }
+    } finally {
+      statusJobRunning = false;
+      if (button) { button.disabled=false; button.classList.remove('is-busy'); }
+    }
+    if (auto) scheduleAutoWatch();
+  }
+
+  async function waitChildJob(jobId, onTick) {
+    if (!jobId) return {ok:true};
+    while (true) {
+      const job=await markingApiRequest(`/api/jobs/${encodeURIComponent(jobId)}`);
+      onTick?.(job);
+      if (job.state==='done') return job.result || {ok:true};
+      if (job.state==='error') throw new Error(job.error || job.message || 'Фоновая операция завершилась ошибкой');
+      await sleep(800);
+    }
+  }
+
+  async function startStatusRefresh({auto=false}={}) {
+    if (statusJobRunning) return;
+    const supplyIds = shells().map(s => s.dataset.supplyId).filter(Boolean);
+    if (!supplyIds.length) return;
+    try {
+      const result = await markingApiRequest('/api/marking/global/refresh', {method:'POST', body:JSON.stringify({supply_ids:supplyIds})});
+      if (result.job_id) await pollJob(result.job_id, {auto});
+    } catch (err) { setMessage(err.message, 'error'); }
+  }
+
+  function scheduleAutoWatch(reset=false) {
+    if (reset) autoWatchCycles = 0;
+    clearTimeout(autoWatchTimer);
+    const totals = updateTotals();
+    if (totals.processing <= 0 || autoWatchCycles >= 18) return;
+    const delays=[1800,2500,3500,5000,7000,9000,12000];
+    const delay=delays[Math.min(autoWatchCycles,delays.length-1)];
+    autoWatchCycles += 1;
+    autoWatchTimer=setTimeout(()=>startStatusRefresh({auto:true}),delay);
+  }
+
+  async function runPool(items, worker, limit=3) {
+    let cursor=0; const errors=[];
+    async function runner() { while (cursor < items.length) { const index=cursor++, item=items[index]; try { await worker(item,index); } catch (err) { errors.push(err); } } }
+    await Promise.all(Array.from({length:Math.min(limit,items.length)},runner));
+    return errors;
+  }
+
+  async function runForContents(kind, sourceButton) {
+    const contents=loadedContents();
+    const candidates=contents.filter(c => {
+      if (kind==='order') return c.dataset.globalCanOrder==='1';
+      if (kind==='print') return c.dataset.globalCanPrint==='1';
+      if (kind==='report') return c.dataset.markingChemistryNeedsReport==='1' && c.dataset.markingChemistryReportInProgress!=='1';
+      if (kind==='introduce') return c.dataset.globalCanIntroduce==='1' && c.dataset.markingChemistryNeedsReport!=='1';
+      if (kind==='wb') return c.dataset.globalCanSendWb==='1';
+      return false;
+    });
+    if (!candidates.length) { setMessage('Для этого шага сейчас нет готовых поставок.'); return; }
+    const labels={order:'Заказать недостающие КИЗы',print:'Напечатать готовые КИЗы',report:'Отправить отчет о нанесении',introduce:'Ввести все готовые КИЗы в оборот',wb:'Передать КИЗы WB'};
+    if (!window.confirm(`${labels[kind]}?\n\nПоставок: ${candidates.length}`)) return;
+    if (sourceButton) sourceButton.disabled=true;
+    const reserve=Number(document.querySelector('[data-global-reserve]')?.value || 0);
+    let done=0;
+    const failures=await runPool(candidates, async(content,index)=>{
+      const supplyId=content.dataset.supplyId;
+      const participantInn=content.querySelector('[data-circulation-participant-inn]')?.value?.trim()||document.querySelector('[data-global-participant-inn]')?.value?.trim()||'';
+      const productionDate=content.querySelector('[data-circulation-production-date]')?.value||'{{ legal_settings.production_date }}';
+      setMessage(`${index+1}/${candidates.length} · ${supplyId} · ${labels[kind]}`);
+      let started=null;
+      if(kind==='order') {
+        started=await markingApiRequest(`/api/supplies/${encodeURIComponent(supplyId)}/suz/order/start`,{method:'POST',body:JSON.stringify({reserve_per_gtin:reserve,payment_type:Number(content.dataset.suzPaymentType||1)})});
+      } else if(kind==='print') {
+        await markingApiRequest(`/api/supplies/${encodeURIComponent(supplyId)}/marking/print-direct`,{method:'POST',body:'{}'});
+      } else if(kind==='report') {
+        started=await markingApiRequest(`/api/supplies/${encodeURIComponent(supplyId)}/marking/application/start`,{method:'POST',body:JSON.stringify({confirmed:true,participant_inn:participantInn,production_date:productionDate,compliance_by_gtin:{}})});
+      } else if(kind==='introduce') {
+        started=await markingApiRequest(`/api/supplies/${encodeURIComponent(supplyId)}/marking/circulation/introduce/start`,{method:'POST',body:JSON.stringify({confirmed:true,ignore_compliance_conflicts:false,participant_inn:participantInn,production_date:productionDate,compliance_by_gtin:{}})});
+      } else if(kind==='wb') {
+        started=await markingApiRequest(`/api/supplies/${encodeURIComponent(supplyId)}/marking/send-wb-all/start`,{method:'POST',body:'{}'});
+      }
+      if (started?.job_id) {
+        await waitChildJob(started.job_id, job=>{
+          const t=job.message || 'Обрабатывается…';
+          setMessage(`${index+1}/${candidates.length} · ${supplyId} · ${t}`);
+          put('[data-global-status-track]', `${supplyId}: ${t}`);
+        });
+      }
+      done+=1;
+      await refreshAll(true);
+    }, kind==='print'?1:(kind==='order'?1:2));
+    if (sourceButton) sourceButton.disabled=false;
+    await refreshAll(true);
+    const failureText=failures[0]?.message || '';
+    setMessage(failures.length ? `Выполнено ${done}/${candidates.length} · ошибок ${failures.length}${failureText ? ` · ${failureText}`:''}` : `Готово · ${done}/${candidates.length}`, failures.length?'error':'');
+    if (kind==='order' || kind==='report' || kind==='introduce') { autoWatchCycles=0; setTimeout(()=>startStatusRefresh({auto:true}), 900); }
+  }
+
+  function settingsMessage(text,error=false){ const el=document.querySelector('[data-global-settings-message]'); if(el){el.textContent=text;el.classList.toggle('error',error);} }
+  function bindGlobalSettings(){
+    document.querySelector('[data-global-save-legal]')?.addEventListener('click',async()=>{try{const result=await markingApiRequest('/api/marking/legal-settings',{method:'POST',body:JSON.stringify({oms_id:document.querySelector('[data-global-oms-id]')?.value?.trim()||'',connection_id:document.querySelector('[data-global-connection-id]')?.value?.trim()||'',participant_inn:document.querySelector('[data-global-participant-inn]')?.value?.trim()||''})});settingsMessage(result.message||'Настройки сохранены');await refreshAll(true);}catch(err){settingsMessage(err.message,true);}});
+    document.querySelector('[data-global-suz-test]')?.addEventListener('click',async()=>{try{const result=await markingApiRequest('/api/suz/test',{method:'POST',body:'{}'});settingsMessage(result.message||'Подключено');const state=document.querySelector('[data-global-connection-state]');if(state){state.className='connection-state ok';state.innerHTML='<i></i>Подключено';}}catch(err){settingsMessage(err.message,true);}});
+    const load=document.querySelector('[data-global-load-certificates]'), select=document.querySelector('[data-global-certificate-select]'), save=document.querySelector('[data-global-save-certificate]');
+    load?.addEventListener('click',async()=>{try{const result=await markingApiRequest('/api/suz/certificates');select.replaceChildren();(result.certificates||[]).forEach(cert=>{const o=document.createElement('option');o.value=cert.thumbprint||'';o.textContent=`${cert.subject||'Сертификат'} · ${(cert.thumbprint||'').slice(-12)}`;select.append(o);});select.disabled=!(result.certificates||[]).length;save.disabled=select.disabled;settingsMessage(`Найдено сертификатов: ${(result.certificates||[]).length}`);}catch(err){settingsMessage(err.message,true);}});
+    save?.addEventListener('click',async()=>{try{const result=await markingApiRequest('/api/suz/certificate',{method:'POST',body:JSON.stringify({thumbprint:select.value||''})});settingsMessage(result.message||'УКЭП сохранена');}catch(err){settingsMessage(err.message,true);}});
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    bindGlobalSettings();
+    document.querySelector('[data-global-status-refresh]')?.addEventListener('click',()=>startStatusRefresh({auto:false}));
+    document.querySelectorAll('[data-global-marking-action]').forEach(button=>button.addEventListener('click',()=>runForContents(button.dataset.globalMarkingAction,button)));
+    document.querySelector('[data-global-reserve]')?.addEventListener('input', updateTotals);
+    refreshAll(false).then(()=>scheduleAutoWatch(true));
+  });
+})();
+</script>
+<script src="/static/connections.js?b={{ fbe_build_id }}"></script>
+</body>
+</html>

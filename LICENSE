@@ -1,0 +1,21 @@
+FBE Source Code License Notice
+
+Copyright (c) 2026 German Efanov. All rights reserved.
+
+The source code of FBE is made publicly viewable for portfolio, review,
+educational discussion, and evaluation purposes.
+
+Unless you have received separate written permission from the copyright owner,
+no permission is granted to copy, modify, redistribute, sublicense, sell, or
+incorporate the FBE source code (in whole or in substantial part) into another
+product or service.
+
+This notice applies only to original FBE source code and documentation.
+Third-party components remain governed by their respective licenses; see
+THIRD_PARTY_NOTICES.md and the third_party/ directory.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR
+A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT OWNER
+BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

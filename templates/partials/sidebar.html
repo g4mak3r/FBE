@@ -1,0 +1,14 @@
+<a class="skip-link" href="#workspace-title">К рабочей области</a>
+<header class="app-header">
+  <div class="brand-block">
+    <div class="brand-title"><a class="brand-home" href="/" aria-label="FBE - главная"><img class="brand-logo" src="/static/branding/fbe-app-icon.png?b={{ fbe_build_id }}" alt=""><span class="brand-name">FBE</span></a><span class="version-pill" title="Build {{ fbe_build_id }}">{{ fbe_version }}</span></div>
+    <span class="sidebar-caption">Рабочее пространство</span>
+    <div class="profile-loading" role="status">Загрузка профиля…</div>
+  </div>
+  <nav class="top-tabs" aria-label="Основная навигация">
+  {% for key, href, label, symbol in [('wb', '/#wb', 'Заказы / поставки', 'M4 7h16v13H4z M4 7l3-4h10l3 4 M9 11h6'), ('marking', '/marking', 'Честный Знак', 'M12 3l8 4v5c0 5-8 9-8 9s-8-4-8-9V7z M8 12l3 3 5-6'), ('manual', '/#manual', 'Ручная печать', 'M7 8V3h10v5 M7 17H4V9h16v8h-3 M7 14h10v7H7z'), ('catalog', '/catalog', 'Каталог', 'M4 4h7v7H4z M14 4h6v7h-6z M4 14h7v6H4z M14 14h6v6h-6z'), ('economy', '/economy', 'Экономика', 'M4 3v17h17 M8 16v-5 M13 16V7 M18 16V4'), ('post', '/marking/post-sale', 'Вывод КИЗ', 'M4 4h9l7 8-8 8-8-7z M8 8h1')] %}
+    <a class="tab{{ ' active' if active_nav == key else '' }}" href="{{ ('#' + key) if local_tabs and key in ['wb','manual'] else href }}" {% if local_tabs and key in ['wb','manual'] %}data-local-tab="{{ key }}"{% endif %} {% if active_nav == key %}aria-current="page"{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ symbol }}"/></svg><span>{{ label }}</span></a>
+  {% endfor %}
+  </nav>
+  <div class="sidebar-footer"><div class="sidebar-mode" data-shell-mode role="status">{% if config is defined and config.mock_mode %}DEMO MODE · тестовая печать{% else %}REAL · рабочий режим{% endif %}</div><small>Локальное приложение</small></div>
+</header>

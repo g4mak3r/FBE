@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <title>FBE {{ fbe_version }} — Ручная печать</title>
+  <link rel="icon" href="/static/icons/favicon.ico?b={{ fbe_build_id }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png?b={{ fbe_build_id }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/fbe-icon-180.png?b={{ fbe_build_id }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/fbe-icon-192.png?b={{ fbe_build_id }}">
+  <link rel="stylesheet" href="/static/style.css?b={{ fbe_build_id }}">
+</head>
+<body>
+{% set active_nav = "manual" %}
+{% set local_tabs = false %}
+{% include "partials/sidebar.html" %}
+<div class="workspace-heading" id="workspace-title" tabindex="-1"><h1>Ручная печать</h1></div>
+
+{% if msg %}<div class="banner ok">{{ msg }}</div>{% endif %}
+{% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+{% if catalog_error %}<div class="banner warn">Каталог: {{ catalog_error }}</div>{% endif %}
+{% if catalog_warnings %}<div class="banner warn">Предупреждения каталога:<br>{% for w in catalog_warnings %}{{ w }}<br>{% endfor %}</div>{% endif %}
+{% if config.mock_mode %}<div class="banner warn">DEMO MODE - синтетические данные, внешние API отключены.</div>{% endif %}
+{% if config.dry_run_print %}<div class="banner warn">Тестовая печать (dry-run) - задания не отправляются на принтер.</div>{% endif %}
+
+<section class="manual-print-head">
+  <h2>Печать маленьких этикеток</h2>
+  <div class="hint">Два независимых режима. Перед отправкой FBE попросит подтвердить замену рулона.</div>
+</section>
+
+{% include "partials/print_state.html" %}
+      <div class="manual-print-cards">
+  <section class="card manual-print-card transition-card">
+    <div class="manual-card-badge">1</div>
+    <div class="section-head compact-head">
+      <div><h2>Печать переходников</h2><div class="hint">Ароматы берутся из листа <code>samples</code> и базы SQLite.</div></div>
+    </div>
+    <form method="post" class="manual-grid manual-grid-single">
+      <input type="hidden" name="label_type" value="samples">
+      <label class="field-block"><span>Аромат</span>
+        <select name="aroma" required>
+          {% for aroma in sample_aromas %}<option value="{{ aroma }}">{{ aroma }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field-block short-field"><span>Количество</span><input name="quantity" type="number" min="1" max="99" value="1" required></label>
+      <input type="hidden" name="volume" value="">
+      <div class="manual-actions"><button type="submit" formaction="/manual-print/direct" class="primary confirm-small-roll">Отправить на печать</button></div>
+    </form>
+  </section>
+
+  <section class="card manual-print-card name-card">
+    <div class="manual-card-badge">2</div>
+    <div class="section-head compact-head">
+      <div><h2>Печать именных этикеток</h2><div class="hint">Ароматы и мотивы — лист <code>names</code>, форматы — лист <code>formats</code>.</div></div>
+    </div>
+    <form method="post" class="manual-grid">
+      <input type="hidden" name="label_type" value="names">
+      <label class="field-block"><span>Аромат</span>
+        <select name="aroma" required>
+          {% for aroma in name_aromas %}<option value="{{ aroma }}">{{ aroma }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field-block"><span>Формат</span>
+        <select name="volume" required>
+          {% for volume in volumes %}<option value="{{ volume }}" {% if volume == default_volume %}selected{% endif %}>{{ volume }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field-block short-field"><span>Количество</span><input name="quantity" type="number" min="1" max="99" value="1" required></label>
+      <div class="manual-actions"><button type="submit" formaction="/manual-print/direct" class="primary confirm-small-roll">Отправить на печать</button></div>
+    </form>
+  </section>
+</div>
+
+<section class="card compact manual-note">
+  <b>Переходники:</b> <code>templates/samples.btw</code> → <code>data/print/manual_samples.csv</code>.<br>
+  <b>Именные этикетки:</b> <code>templates/names.btw</code> → <code>data/print/manual_names.csv</code>.<br>
+  FBE печатает все строки CSV напрямую на <b>{{ config.small_label_printer_name or "Не настроен" }}</b>.
+</section>
+<script src="/static/app.js?b={{ fbe_build_id }}"></script>
+<script src="/static/connections.js?b={{ fbe_build_id }}"></script>
+</body>
+</html>
