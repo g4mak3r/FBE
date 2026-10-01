@@ -1,0 +1,36 @@
+name: FBE Flow Foundation
+
+on:
+  push:
+    paths: ["fbe-flow/**", ".github/workflows/fbe-flow.yml"]
+  pull_request:
+    paths: ["fbe-flow/**", ".github/workflows/fbe-flow.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: windows-latest
+            python: "3.12"
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: fbe-flow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: fbe-flow/requirements-lock.txt
+      - run: python -m pip install -c requirements-lock.txt ".[dev]"
+      - run: python -m ruff check .
+      - run: python -m ruff format --check .
+      - run: python -m pytest
