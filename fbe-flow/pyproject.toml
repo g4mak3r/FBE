@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fbe-flow"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local, seller-isolated marketplace operations foundation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,7 +25,7 @@ fbe-flow = "fbe_flow.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-fbe_flow = ["core/migrations/*.sql", "web/templates/*.html", "web/static/*"]
+fbe_flow = ["core/migrations/*.sql", "web/templates/*.html", "web/static/*", "integrations/chz/*.ps1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,6 +1,8 @@
 import json
 import logging
+import re
 import sqlite3
+from collections.abc import Callable
 from threading import Event, Thread
 from uuid import uuid4
 
@@ -30,6 +32,11 @@ class Operations:
     def __init__(self, database: Database, registry: AdapterRegistry):
         self.db = database
         self.registry = registry
+        # Concrete contours can persist their own state without giving adapters a DB.
+        self.executor: Callable | None = None
+        self.result_handler: Callable | None = None
+        self.recovery_handler: Callable | None = None
+        self.failure_handler: Callable | None = None
 
     def list(self, seller_id: str) -> list[dict]:
         with self.db.connection() as conn:
@@ -98,6 +105,8 @@ class Operations:
                 "UPDATE operations SET status = 'interrupted', error_code = 'process_interrupted', "
                 "finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE status = 'running'"
             )
+            if self.recovery_handler:
+                self.recovery_handler(conn)
 
     def claim(self) -> dict | None:
         # The only cross-seller read: dispatch one job, then carry its seller_id everywhere.
@@ -128,9 +137,10 @@ class Operations:
                 job["seller_id"], job["connection_id"]
             )
             adapter = self.registry.get(connection["adapter_key"])
+            execute = self.executor or (lambda a, c, k, p: a.execute(c, k, p))
             result = OperationResult.model_validate(
-                adapter.execute(
-                    connection_context(connection), job["operation_key"], job["payload"]
+                execute(
+                    adapter, connection_context(connection), job["operation_key"], job["payload"]
                 )
             )
             with self.db.connection() as conn:
@@ -140,6 +150,8 @@ class Operations:
                     counts = Records(self.db).apply_in_transaction(
                         conn, job["seller_id"], job["connection_id"], result.batch
                     )
+                if self.result_handler:
+                    self.result_handler(conn, job, result)
                 updated = conn.execute(
                     "UPDATE operations SET status = 'succeeded', result_json = ?, "
                     "finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
@@ -158,12 +170,17 @@ class Operations:
         except Exception as exc:
             logger.warning("Operation %s failed (%s)", job["id"], type(exc).__name__)
             with self.db.connection() as conn:
+                code = getattr(exc, "code", "execution_failed")
+                if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_]{1,80}", code):
+                    code = "execution_failed"
                 conn.execute(
-                    "UPDATE operations SET status = 'failed', error_code = 'execution_failed', "
+                    "UPDATE operations SET status = 'failed', error_code = ?, "
                     "finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
                     "WHERE seller_id = ? AND id = ? AND status = 'running'",
-                    scope,
+                    (code, *scope),
                 )
+                if self.failure_handler:
+                    self.failure_handler(conn, job, code)
         return True
 
 

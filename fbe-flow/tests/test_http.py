@@ -28,7 +28,7 @@ def test_empty_foundation_and_shell_pages(tmp_path):
     app = create_app(AppConfig(tmp_path))
     with TestClient(app, base_url="http://localhost", headers={"X-FBE-Flow": "1"}) as client:
         assert "Начните с продавца" in client.get("/").text
-        assert client.get("/api/adapters").json() == []
+        assert client.get("/api/adapters").json() == [{"key": "chz", "label": "Честный Знак"}]
         assert client.get("/health").json() == {"status": "ok", "worker": "running"}
         seller = create_seller(client, "My seller")
         for page in ("overview", "connections", "operations", "settings"):

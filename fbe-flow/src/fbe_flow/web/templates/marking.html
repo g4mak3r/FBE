@@ -1,0 +1,49 @@
+{% set chz_connections = connections | selectattr('adapter_key', 'equalto', 'chz') | list %}
+<section class="panel">
+  <details {% if not chz_connections %}open{% endif %}>
+    <summary>Подключить аккаунт Честного Знака</summary>
+    <form id="chz-connect">
+      <label>Название подключения<input name="name" required maxlength="120" placeholder="Аккаунт компании"></label>
+      <label>Среда<select name="environment"><option value="sandbox">Тестовая</option><option value="production">Промышленная</option></select></label>
+      <label>ИНН<input name="inn" inputmode="numeric" pattern="\d{10}(\d{2})?" required></label>
+      <div class="toolbar"><button type="button" id="chz-certificates" class="secondary">Найти сертификаты УКЭП</button><small>Windows · КриптоПро CSP и CAdESCOM</small></div>
+      <label>Сертификат<select name="certificate" id="chz-certificate"><option value="">Выбрать сертификат</option></select></label>
+      <details><summary>Временный доступ по токену True API</summary>
+        <label>Действующий токен<input name="true_token" type="password" autocomplete="off" maxlength="8192"></label>
+        <p class="muted">После истечения срока токена обновите доступ. При выборе УКЭП авторизация выполняется автоматически.</p>
+      </details>
+      <button type="submit">Проверить и подключить</button>
+    </form>
+  </details>
+</section>
+{% if chz_connections %}
+<section class="panel">
+  <label>Аккаунт<select id="chz-connection">{% for item in chz_connections %}<option value="{{ item.id }}">{{ item.name }} · {{ item.external_account_id }}</option>{% endfor %}</select></label>
+  <div class="toolbar"><span id="chz-environment" class="badge"></span><span id="chz-sync-status">Каталог еще не обновлялся</span></div>
+  <p id="chz-last-sync" class="muted"></p>
+  <div class="toolbar">
+    <button type="button" id="chz-sync">Синхронизировать</button>
+    <button type="button" id="chz-force-sync" class="secondary">Перезагрузить все карточки</button>
+    <button type="button" id="chz-references" class="secondary">Обновить справочники и аккаунт</button>
+  </div>
+  <details><summary>Обновить доступ к текущему аккаунту</summary>
+    <form id="chz-renew">
+      <label>Отпечаток сертификата УКЭП<input name="certificate" pattern="[a-fA-F0-9]{40}" placeholder="40 символов из сертификата"></label>
+      <label>Или новый токен True API<input name="true_token" type="password" autocomplete="off" maxlength="8192"></label>
+      <button type="submit">Проверить и сохранить доступ</button>
+    </form>
+  </details>
+  <details><summary>Данные аккаунта и категории НК</summary><pre id="chz-references-json">Справочники загружаются после подключения.</pre></details>
+</section>
+<section class="panel">
+  <div class="toolbar"><h2>Национальный каталог</h2><span id="chz-count" class="muted"></span></div>
+  <form id="chz-search" class="toolbar"><input name="search" placeholder="Название, GTIN или ID НК" aria-label="Поиск карточек"><button type="submit" class="secondary">Найти</button></form>
+  <form id="chz-lookup" class="toolbar"><input name="gtin" inputmode="numeric" required pattern="\d{8}|\d{12,14}" placeholder="Запросить доступную карточку по GTIN" aria-label="GTIN"><button type="submit" class="secondary">Запросить НК</button></form>
+  <div id="chz-lookup-result"></div>
+  <div class="table-scroll"><table><thead><tr><th>Товар</th><th>GTIN</th><th>Категория</th><th>Статус НК</th><th>Готовность</th></tr></thead><tbody id="chz-products"></tbody></table></div>
+  <div class="toolbar"><button type="button" id="chz-prev" class="secondary">Назад</button><button type="button" id="chz-next" class="secondary">Далее</button></div>
+</section>
+<dialog id="chz-card"><h2 id="chz-card-title"></h2><p id="chz-card-status" class="muted"></p><pre id="chz-card-json"></pre><button type="button" id="chz-card-close" class="secondary">Закрыть</button></dialog>
+{% else %}
+<section class="panel empty"><h2>Подключите аккаунт</h2><p>Карточки, категории и статусы появятся после проверки доступа. Данные НК будут принадлежать выбранному продавцу.</p></section>
+{% endif %}

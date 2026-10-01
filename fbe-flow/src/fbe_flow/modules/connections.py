@@ -64,6 +64,9 @@ class Connections:
             raise InvalidInput("Название подключения: от 1 до 120 символов")
         adapter = self.registry.get(adapter_key)
         try:
+            # Optional credential binding guard for adapters which use a protected vault.
+            if guard := getattr(adapter, "validate_binding", None):
+                guard(seller_id, config)
             account = AccountInfo.model_validate(adapter.describe(config))
         except Exception as exc:
             # Adapter exceptions can contain tokens/URLs. Never expose their text.

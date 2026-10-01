@@ -18,7 +18,7 @@ nav a, nav .disabled { padding: 12px 10px; border-radius: 6px; font-size: 14px; 
 nav a[aria-current] { background: #edf2fa; color: #263e66; font-weight: 650; }
 .disabled, .muted { color: #747e8d; }
 .sidebar-footer { margin-top: auto; padding-top: 32px; display: grid; gap: 8px; color: #747e8d; font-size: 13px; }
-main { padding: 42px; max-width: 1100px; width: 100%; }
+main { padding: 42px; max-width: 1100px; width: 100%; min-width: 0; }
 header { margin-bottom: 28px; }h1 { font-size: 27px; font-weight: 650; margin: 0; }h2 { font-size: 18px; margin: 0 0 18px; }h3 { font-size: 16px; margin: 0; }
 .panel { background: white; padding: 24px; border: 1px solid #e2e6ec; border-radius: 10px; margin-bottom: 20px; }
 .empty { max-width: 650px; }.empty p { line-height: 1.6; margin-bottom: 24px; }
@@ -30,4 +30,17 @@ pre { white-space: pre-wrap; font-size: 13px; }small { color: #747e8d; }
 #feedback { padding: 12px; color: #8c3029; background: #fff1ef; border-radius: 6px; }
 dialog { border: 1px solid #d7dfe9; border-radius: 10px; padding: 28px; width: min(460px, 90vw); }dialog::backdrop { background: #20293650; }
 .actions { display: flex; gap: 10px; justify-content: flex-end; }
-@media (max-width: 760px) { body { grid-template-columns: 1fr; }.sidebar { border-right: 0; border-bottom: 1px solid #e2e6ec; }nav { grid-template-columns: 1fr 1fr; margin-top: 0; }.sidebar-footer { padding-top: 0; }main { padding: 24px 16px; }h1 { font-size: 24px; } }
+@media (max-width: 760px) { body { grid-template-columns: minmax(0, 1fr); }.sidebar { border-right: 0; border-bottom: 1px solid #e2e6ec; min-width: 0; }nav { grid-template-columns: 1fr 1fr; margin-top: 0; }.sidebar-footer { padding-top: 0; }main { padding: 24px 16px; }h1 { font-size: 24px; } }
+
+.toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 16px 0; max-width: none; }
+.toolbar h2 { margin: 0; }.toolbar input { flex: 1; min-width: 180px; }.toolbar button { flex-shrink: 0; }
+summary { cursor: pointer; font-weight: 600; margin-bottom: 18px; }details > form { margin-top: 20px; }
+.table-scroll { overflow: auto; margin: 20px 0; }table { border-collapse: collapse; width: 100%; text-align: left; font-size: 14px; }
+th { color: #747e8d; font-weight: 600; white-space: nowrap; }th, td { padding: 13px 10px; border-bottom: 1px solid #e9ecf1; vertical-align: top; }
+td { overflow-wrap: anywhere; min-width: 110px; }td:first-child { min-width: 32px; }td small { display: block; margin-top: 6px; }
+.text-button { background: none; border: 0; color: #263e66; padding: 0; text-align: left; font-weight: 600; }
+.badge { padding: 5px 9px; border-radius: 5px; background: #edf2fa; font-size: 13px; }
+.chz-link { color: #263e66; text-decoration: underline; }.operation button { margin: 8px 10px 0 0; }
+#chz-card { width: min(840px, 94vw); max-height: 90vh; overflow: auto; }
+hr { border: 0; border-top: 1px solid #e9ecf1; margin: 28px 0; }
+[hidden] { display: none !important; }

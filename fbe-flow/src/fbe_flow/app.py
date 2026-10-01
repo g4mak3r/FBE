@@ -11,27 +11,44 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from fbe_flow.config import AppConfig, default_data_dir
+from fbe_flow.core.credentials import WindowsVault
 from fbe_flow.core.database import Database
 from fbe_flow.core.errors import Conflict, FlowError, InvalidInput, NotFound
 from fbe_flow.core.instance import single_instance
 from fbe_flow.core.integrations import AdapterRegistry, IntegrationAdapter
 from fbe_flow.integrations import installed_adapters
+from fbe_flow.integrations.chz.http import RemoteError
+from fbe_flow.integrations.chz.signing import WindowsSigner
 from fbe_flow.modules.connections import Connections
+from fbe_flow.modules.marking import Marking
 from fbe_flow.modules.operations import Operations, Worker
 from fbe_flow.modules.records import Records
 from fbe_flow.modules.sellers import Sellers
 from fbe_flow.modules.settings import Settings
+from fbe_flow.web.marking import router as marking_router
 from fbe_flow.web.routes import router
 
 
 def create_app(
-    config: AppConfig | None = None, adapters: Iterable[IntegrationAdapter] | None = None
+    config: AppConfig | None = None,
+    adapters: Iterable[IntegrationAdapter] | None = None,
+    *,
+    vault=None,
+    signer=None,
 ) -> FastAPI:
     config = config or AppConfig(default_data_dir())
-    registry = AdapterRegistry(installed_adapters() if adapters is None else adapters)
+    vault = vault or WindowsVault(config.data_dir / "credentials")
+    signer = signer or WindowsSigner(config.data_dir / "runtime")
+    registry = AdapterRegistry(installed_adapters(vault, signer) if adapters is None else adapters)
     database = Database(config.database_path)
     operations = Operations(database, registry)
     worker = Worker(operations)
+    connections = Connections(database, registry)
+    marking = Marking(database, connections, operations, registry)
+    operations.executor = marking.execute
+    operations.result_handler = marking.apply_result
+    operations.recovery_handler = marking.recover
+    operations.failure_handler = marking.fail
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -45,12 +62,15 @@ def create_app(
                 if config.worker_enabled:
                     await asyncio.to_thread(worker.stop)
 
-    app = FastAPI(title="FBE Flow", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="FBE Flow", version="0.2.0", lifespan=lifespan)
     app.state.config = config
     app.state.registry = registry
     app.state.database = database
     app.state.sellers = Sellers(database)
-    app.state.connections = Connections(database, registry)
+    app.state.connections = connections
+    app.state.marking = marking
+    app.state.vault = vault
+    app.state.signer = signer
     app.state.settings = Settings(database)
     app.state.records = Records(database)
     app.state.operations = operations
@@ -59,6 +79,18 @@ def create_app(
     app.state.templates = Jinja2Templates(directory=web_dir / "templates")
     app.mount("/static", StaticFiles(directory=web_dir / "static"), name="static")
     app.include_router(router)
+    app.include_router(marking_router)
+
+    @app.exception_handler(RemoteError)
+    async def upstream_error(request: Request, exc: RemoteError):
+        return JSONResponse(
+            {
+                "detail": f"ЧЗ: {exc.code}. Проверьте доступ и повторите чтение позже",
+                "code": exc.code,
+                "errors": exc.details,
+            },
+            status_code=502,
+        )
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError):

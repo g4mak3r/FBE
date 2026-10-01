@@ -32,6 +32,11 @@ class Database:
             current = conn.execute("PRAGMA user_version").fetchone()[0]
             if current > len(migrations):
                 raise RuntimeError("Database schema is newer than this application")
+            if 0 < current < len(migrations):
+                backup_path = self.path.with_suffix(f".before-v{len(migrations)}.sqlite3")
+                if not backup_path.exists():
+                    with sqlite3.connect(backup_path) as backup:
+                        conn.backup(backup)
             for version, migration in enumerate(migrations, start=1):
                 if version > current:
                     # executescript doesn't preserve an implicit transaction, so make it explicit.
