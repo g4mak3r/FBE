@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FBE Flow</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/shell.css') }}">
+  <script defer src="{{ url_for('static', path='/shell.js') }}"></script>
+</head>
+<body data-seller-id="{{ seller.id if seller else '' }}">
+  <aside class="sidebar">
+    <a class="brand" href="/">FBE <span>Flow</span></a>
+    <p class="caption">Локальная платформа</p>
+    <label for="seller-select">Текущий продавец</label>
+    <select id="seller-select" {% if not sellers %}disabled{% endif %}>
+      {% if not sellers %}<option>Нет продавцов</option>{% endif %}
+      {% for item in sellers %}
+      <option value="{{ item.id }}" {% if seller and item.id == seller.id %}selected{% endif %}>{{ item.name }}</option>
+      {% endfor %}
+    </select>
+    <button id="add-seller" class="secondary" type="button">Добавить продавца</button>
+    <nav aria-label="Основная навигация">
+      {% for key, label in [('overview', 'Рабочее пространство'), ('connections', 'Подключения'), ('operations', 'Операции'), ('settings', 'Настройки')] %}
+      {% if seller %}
+      <a href="/sellers/{{ seller.id }}/{{ key }}" {% if page == key %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% else %}<span class="disabled">{{ label }}</span>{% endif %}
+      {% endfor %}
+    </nav>
+    <div class="sidebar-footer"><span id="worker-status">Проверка состояния…</span><small>Foundation · 0.1</small></div>
+  </aside>
+  <main>
+    <header><p class="caption">{{ seller.name if seller else 'Первый запуск' }}</p>
+      <h1>{{ {'overview': 'Рабочее пространство', 'connections': 'Подключенные системы', 'operations': 'Фоновые операции', 'settings': 'Настройки'}[page] }}</h1>
+    </header>
+    <p id="feedback" role="status" hidden></p>
+    {% if not seller %}
+    <section class="panel empty"><h2>Начните с продавца</h2><p>Создайте рабочее пространство для своего аккаунта. Подключения и данные будут принадлежать выбранному продавцу.</p><button type="button" id="first-seller">Создать продавца</button></section>
+    {% else %}
+      {% if page in ['overview', 'connections'] %}
+      <section class="panel"><h2>Подключенные системы</h2>
+        {% for connection in connections %}
+        <article class="connection"><h3>{{ connection.name }}</h3><p>{{ connection.adapter_key }} · {{ connection.external_account_id }}</p>
+          {% for operation in connection.operations %}
+          <button class="queue-operation secondary" type="button" data-connection="{{ connection.id }}" data-operation="{{ operation.key }}">{{ operation.label }}</button>
+          {% else %}<small>Нет доступных операций</small>{% endfor %}
+        </article>
+        {% else %}<p class="muted">Пока нет подключенных систем.</p>{% endfor %}
+      </section>
+      {% endif %}
+      {% if page == 'connections' %}
+      <section class="panel"><h2>Новое подключение</h2>
+        {% if adapters %}
+        <form id="connection-form">
+          <label>Система<select name="adapter_key" required>{% for adapter in adapters %}<option value="{{ adapter.key }}">{{ adapter.label }}</option>{% endfor %}</select></label>
+          <label>Название<input name="name" maxlength="120" required></label>
+          <label>Параметры подключения (JSON)<textarea name="config" rows="4" required>{}</textarea></label>
+          <p class="muted">Только параметры без секретов. Порядок авторизации определяется адаптером.</p>
+          <button type="submit">Подключить</button>
+        </form>
+        {% else %}<p class="muted">В Foundation внешние адаптеры еще не добавлены. Подключения появятся на следующем этапе.</p>{% endif %}
+      </section>
+      {% endif %}
+      {% if page in ['overview', 'operations'] %}
+      <section class="panel"><h2>Состояние операций</h2><div id="operations-list" aria-live="polite"><p class="muted">Загрузка…</p></div></section>
+      {% endif %}
+      {% if page == 'settings' %}
+      <section class="panel"><h2>Настройки продавца</h2>
+        {% for key, value in settings.items() %}<article class="setting"><strong>{{ key }}</strong><pre>{{ value | tojson(indent=2) }}</pre></article>
+        {% else %}<p class="muted">Пока нет сохраненных настроек.</p>{% endfor %}
+        <form id="settings-form">
+          <label>Ключ настройки<input name="key" maxlength="120" required></label>
+          <label>Значение (JSON)<textarea name="value" rows="3" required></textarea></label>
+          <button type="submit">Сохранить</button>
+        </form>
+      </section>
+      {% endif %}
+    {% endif %}
+  </main>
+  <dialog id="seller-dialog"><form id="seller-form">
+    <h2>Новый продавец</h2><label>Название<input name="name" maxlength="120" required autofocus></label>
+    <div class="actions"><button type="button" id="cancel-seller" class="secondary">Отмена</button><button type="submit">Создать</button></div>
+  </form></dialog>
+</body>
+</html>
