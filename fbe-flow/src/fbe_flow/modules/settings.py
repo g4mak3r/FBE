@@ -1,0 +1,34 @@
+import json
+
+from pydantic import JsonValue
+
+from fbe_flow.core.database import Database
+from fbe_flow.core.errors import InvalidInput
+from fbe_flow.modules.sellers import require_seller
+
+
+class Settings:
+    def __init__(self, database: Database):
+        self.db = database
+
+    def list(self, seller_id: str) -> dict[str, JsonValue]:
+        with self.db.connection() as conn:
+            require_seller(conn, seller_id)
+            return {
+                row["key"]: json.loads(row["value_json"])
+                for row in conn.execute(
+                    "SELECT key, value_json FROM settings WHERE seller_id = ? ORDER BY key",
+                    (seller_id,),
+                )
+            }
+
+    def set(self, seller_id: str, key: str, value: JsonValue) -> None:
+        if not key.strip() or key != key.strip() or len(key) > 120:
+            raise InvalidInput("Ключ настройки: от 1 до 120 символов, без пробелов по краям")
+        with self.db.connection() as conn:
+            require_seller(conn, seller_id)
+            conn.execute(
+                "INSERT INTO settings(seller_id, key, value_json) VALUES (?, ?, ?) "
+                "ON CONFLICT(seller_id, key) DO UPDATE SET value_json = excluded.value_json",
+                (seller_id, key, json.dumps(value, ensure_ascii=False, allow_nan=False)),
+            )
