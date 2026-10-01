@@ -22,7 +22,7 @@ def test_migration_is_idempotent_and_foreign_keys_always_enabled(db):
     db.initialize()
     assert Sellers(db).get(seller["id"])["name"] == "Preserved"
     with db.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
 
 

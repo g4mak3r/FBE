@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from pathlib import Path
 from uuid import uuid4
@@ -54,17 +55,83 @@ def test_upgrade_from_v2_backs_up_and_preserves_existing_identity_and_scope(tmp_
         )
         conn.execute("INSERT INTO sellers(id,name) VALUES (?,?)", (str(uuid4()), "Preserved"))
     database.initialize()
-    backup_path = tmp_path / "flow.before-v3.sqlite3"
+    backup_path = tmp_path / "flow.before-v4.sqlite3"
     assert backup_path.exists()
     with sqlite3.connect(backup_path) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
         assert conn.execute("SELECT name FROM sellers").fetchone()[0] == "Preserved"
     with database.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
         assert conn.execute("SELECT name FROM sellers").fetchone()[0] == "Preserved"
     before = backup_path.read_bytes()
     database.initialize()
     assert backup_path.read_bytes() == before
+
+
+def test_upgrade_from_stage1_v3_preserves_cards_connection_refs_and_queue(tmp_path):
+    database = Database(tmp_path / "flow.sqlite3")
+    migrations = Path(db_module.__file__).parent / "migrations"
+    seller, connection, product, operation = (str(uuid4()) for _ in range(4))
+    config = json.dumps({"credential_ref": f"{seller}:existing-ref", "inn": "123456789012"})
+    with database.connection() as conn:
+        conn.executescript(
+            "BEGIN IMMEDIATE;\n"
+            + "\n".join(
+                (migrations / name).read_text(encoding="utf-8")
+                for name in (
+                    "001_foundation.sql",
+                    "002_operation_results_and_scope.sql",
+                    "003_chz_catalog.sql",
+                )
+            )
+            + "\nPRAGMA user_version=3;\nCOMMIT;"
+        )
+        conn.execute("INSERT INTO sellers(id,name) VALUES (?,?)", (seller, "Preserved"))
+        conn.execute(
+            "INSERT INTO connections(id,seller_id,adapter_key,name,external_account_id,"
+            "config_json,operations_json) VALUES (?,?,?,?,?,?,?)",
+            (connection, seller, "chz", "Account", "sandbox:123456789012", config, "[]"),
+        )
+        conn.execute(
+            "INSERT INTO products(id,seller_id,connection_id,external_id,title,category_json,"
+            "identifiers_json,attributes_json) VALUES (?,?,?,?,?,?,?,?)",
+            (product, seller, connection, "1", "Original", "{}", "{}", '{"own_card":true}'),
+        )
+        conn.execute(
+            "INSERT INTO nk_cards(seller_id,connection_id,external_id,etag,detail_available,"
+            "present,last_seen_run) VALUES (?,?,?,?,?,?,?)",
+            (seller, connection, "1", "original-etag", 1, 1, "original-run"),
+        )
+        conn.execute(
+            "INSERT INTO operations(id,seller_id,connection_id,operation_key,payload_json,"
+            "scope_key) VALUES (?,?,?,?,?,?)",
+            (operation, seller, connection, "nk.references", "{}", "original-scope"),
+        )
+    database.initialize()
+    with database.connection() as conn:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert (
+            dict(conn.execute("SELECT * FROM products WHERE id=?", (product,)).fetchone())["title"]
+            == "Original"
+        )
+        assert (
+            conn.execute(
+                "SELECT config_json FROM connections WHERE id=?", (connection,)
+            ).fetchone()[0]
+            == config
+        )
+        assert tuple(
+            conn.execute("SELECT etag,detail_available,present FROM nk_cards").fetchone()
+        ) == ("original-etag", 1, 1)
+        assert tuple(
+            conn.execute(
+                "SELECT status,scope_key FROM operations WHERE id=?", (operation,)
+            ).fetchone()
+        ) == ("queued", "original-scope")
+        assert not conn.execute("PRAGMA foreign_key_check").fetchall()
+    with sqlite3.connect(tmp_path / "flow.before-v4.sqlite3") as conn:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert conn.execute("SELECT id FROM products").fetchone()[0] == product
 
 
 def test_interrupted_page_exposes_status_and_can_restart(workspace):

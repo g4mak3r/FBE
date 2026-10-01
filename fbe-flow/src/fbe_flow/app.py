@@ -49,11 +49,13 @@ def create_app(
     operations.result_handler = marking.apply_result
     operations.recovery_handler = marking.recover
     operations.failure_handler = marking.fail
+    operations.idle_handler = marking.queue_due
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         with single_instance(config.data_dir):
             database.initialize()
+            marking.refresh_capabilities()
             if config.worker_enabled:
                 worker.start()
             try:
@@ -62,7 +64,7 @@ def create_app(
                 if config.worker_enabled:
                     await asyncio.to_thread(worker.stop)
 
-    app = FastAPI(title="FBE Flow", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="FBE Flow", version="0.3.0", lifespan=lifespan)
     app.state.config = config
     app.state.registry = registry
     app.state.database = database

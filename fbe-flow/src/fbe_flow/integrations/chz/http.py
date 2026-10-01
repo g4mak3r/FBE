@@ -17,6 +17,11 @@ class RemoteError(Exception):
         self.code = code
         self.details = details
 
+    @property
+    def definite_rejection(self):
+        # A missing response or 5xx cannot establish whether a mutation was accepted.
+        return self.status in {400, 401, 403, 404, 405, 413, 415, 422, 429}
+
 
 @dataclass(frozen=True)
 class Reply:
@@ -40,11 +45,15 @@ class HttpTransport:
         if params:
             url += "?" + urlencode(params, doseq=True)
         data = (
-            None
-            if body is None
-            else json.dumps(
-                body, ensure_ascii=False, allow_nan=False, separators=(",", ":")
-            ).encode("utf-8")
+            body
+            if isinstance(body, bytes)
+            else (
+                None
+                if body is None
+                else json.dumps(
+                    body, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+                ).encode("utf-8")
+            )
         )
         request = urllib.request.Request(
             url,
@@ -64,7 +73,15 @@ class HttpTransport:
                 try:
                     value = json.loads(raw) if raw else None
                 except (ValueError, UnicodeError) as exc:
-                    raise RemoteError(None, "invalid_response") from exc
+                    # True API's document-create acknowledgement can be a plain UUID.
+                    try:
+                        value = raw.decode("ascii").strip()
+                    except UnicodeError:
+                        raise RemoteError(None, "invalid_response") from exc
+                    if not re.fullmatch(
+                        r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", value
+                    ):
+                        raise RemoteError(None, "invalid_response") from exc
                 return Reply(response.status, value, dict(response.headers))
         except urllib.error.HTTPError as exc:
             if exc.code == 304:
@@ -84,7 +101,7 @@ def redact(value, secrets):
         return {
             str(k): redact(v, secrets)
             for k, v in value.items()
-            if not re.search(r"token|apikey|secret|password|authorization", str(k), re.I)
+            if not re.search(r"token|apikey|secret|password|authorization|signature", str(k), re.I)
         }
     if isinstance(value, list):
         return [redact(item, secrets) for item in value]

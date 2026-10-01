@@ -37,6 +37,7 @@ class Operations:
         self.result_handler: Callable | None = None
         self.recovery_handler: Callable | None = None
         self.failure_handler: Callable | None = None
+        self.idle_handler: Callable | None = None
 
     def list(self, seller_id: str) -> list[dict]:
         with self.db.connection() as conn:
@@ -128,6 +129,8 @@ class Operations:
             return result
 
     def run_once(self) -> bool:
+        if self.idle_handler:
+            self.idle_handler()
         job = self.claim()
         if job is None:
             return False

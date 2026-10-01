@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fbe-flow"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local, seller-isolated marketplace operations foundation"
 readme = "README.md"
 requires-python = ">=3.11"

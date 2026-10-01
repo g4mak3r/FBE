@@ -1,3 +1,4 @@
+import json
 import re
 import time
 from datetime import UTC, datetime
@@ -17,16 +18,21 @@ from fbe_flow.core.models import (
     Product,
 )
 from fbe_flow.integrations.chz.http import HttpTransport, RemoteError, redact
+from fbe_flow.integrations.chz.workflows import ChzWorkflows
 
 # These are protocol addresses/types, not seller categories, products or warehouse IDs.
 ENDPOINTS = {
     "production": {
         "nk": "https://xn--80aqu.xn----7sbabas4ajkhfocclk9d3cvfsa.xn--p1ai",
         "true": "https://markirovka.crpt.ru/api/v3/true-api",
+        "true4": "https://markirovka.crpt.ru/api/v4/true-api",
+        "suz": "https://suzgrid.crpt.ru",
     },
     "sandbox": {
         "nk": "https://api.nk.sandbox.crptech.ru",
         "true": "https://markirovka.sandbox.crptech.ru/api/v3/true-api",
+        "true4": "https://markirovka.sandbox.crptech.ru/api/v4/true-api",
+        "suz": "https://suz.sandbox.crptech.ru",
     },
 }
 SPECS = [
@@ -34,6 +40,12 @@ SPECS = [
     ("nk.sync", "Синхронизировать каталог"),
     ("nk.references", "Обновить справочники НК"),
     ("nk.lookup", "Найти карточку по GTIN"),
+    ("codes.check", "Проверить статусы кодов"),
+    ("suz.status", "Проверить заказ СУЗ"),
+    ("suz.blocks", "Получить список выданных блоков"),
+    ("suz.receipt", "Прочитать квитанцию СУЗ"),
+    ("document.submit", "Отправить подготовленный документ"),
+    ("document.poll", "Проверить обработку документа"),
 ]
 
 
@@ -42,6 +54,8 @@ class ChzConfig(Contract):
     inn: str = Field(pattern=r"^\d{10}(\d{2})?$")
     credential_ref: str
     certificate: str = Field(default="", pattern=r"^([a-fA-F0-9]{40})?$")
+    oms_id: str = Field(default="", pattern=r"^([a-fA-F0-9-]{36})?$")
+    oms_connection: str = Field(default="", pattern=r"^([a-fA-F0-9-]{36})?$")
 
 
 def unwrap(data):
@@ -50,15 +64,24 @@ def unwrap(data):
     return data
 
 
-class ChzAdapter:
+class ChzAdapter(ChzWorkflows):
     key = "chz"
     label = "Честный Знак"
+
+    @staticmethod
+    def urls(config):
+        return ENDPOINTS[config.environment]
+
+    @staticmethod
+    def supported_operations():
+        return [OperationSpec(key=key, label=label).model_dump() for key, label in SPECS]
 
     def __init__(self, vault: CredentialVault, signer, transport=None):
         self.vault = vault
         self.signer = signer
         self.http = transport or HttpTransport()
         self._tokens = {}
+        self._suz_tokens = {}
         self._lock = Lock()
 
     def validate_binding(self, seller_id, config):
@@ -67,7 +90,10 @@ class ChzAdapter:
 
     def config(self, context):
         self.validate_binding(context.seller_id, context.config)
-        return ChzConfig.model_validate(context.config)
+        config = ChzConfig.model_validate(context.config)
+        if context.external_account_id != f"{config.environment}:{config.inn}":
+            raise InvalidInput("Параметры не соответствуют подключенному аккаунту")
+        return config
 
     def _token(self, config):
         secrets = self.vault.get(credential_owner(config.credential_ref), config.credential_ref)
@@ -124,25 +150,49 @@ class ChzAdapter:
             raise InvalidInput("Выберите УКЭП или сохраните действующий токен True API")
 
     def _call(self, config, system, method, path, *, params=None, body=None, headers=None):
-        token = self._token(config)
+        token = self._client_token(config) if system == "suz" else self._token(config)
+        if system == "suz":
+            from fbe_flow.integrations.chz.formats import uuid_text
+
+            params = {**(params or {}), "omsId": uuid_text(config.oms_id)}
+        auth = {"clientToken": token} if system == "suz" else {"Authorization": f"Bearer {token}"}
+        hidden = [token, (headers or {}).get("X-Signature", "")]
+        request_value = json.loads(body) if isinstance(body, bytes) else body
+        entries = request_value if isinstance(request_value, list) else [request_value]
+        hidden.extend(
+            v["signature"]
+            for v in entries
+            if isinstance(v, dict) and isinstance(v.get("signature"), str)
+        )
         try:
             reply = self.http.request(
                 method,
                 ENDPOINTS[config.environment][system] + path,
                 params=params,
-                headers={"Authorization": f"Bearer {token}", **(headers or {})},
+                headers={**auth, **(headers or {})},
                 body=body,
             )
         except RemoteError as exc:
-            exc.details = redact(exc.details, [token])
+            exc.details = redact(exc.details, hidden)
             if exc.status == 401:
                 with self._lock:
                     self._tokens.clear()
+                    self._suz_tokens.clear()
             raise
-        value = redact(reply.data, [token])
+        value = redact(reply.data, hidden)
         if isinstance(value, dict) and (value.get("error") or value.get("error_code")):
-            raise RemoteError(reply.status, "nk_api_error", value)
+            raise RemoteError(400, "upstream_api_error", value)
         return value
+
+    def refresh_document(self, context, document):
+        body = document["body"]
+        ids = (
+            list(map(int, body["versions"]))
+            if document["kind"] == "nk_feed"
+            else [v["goodId"] for v in body["xmls"]]
+        )
+        cards = self._own_cards(self.config(context), ids)
+        return NormalizedBatch(products=tuple(self._product(v) for v in cards))
 
     def account(self, config):
         value = self._call(config, "true", "GET", "/participants", params={"inns": config.inn})
@@ -169,9 +219,13 @@ class ChzAdapter:
         )
         if not isinstance(page, dict) or not isinstance(page.get("goods"), list):
             raise RemoteError(None, "nk_response_invalid")
+        if parsed.oms_id or parsed.oms_connection:
+            self.suz_ping(parsed)
         return AccountInfo(
             external_account_id=f"{parsed.environment}:{account['inn']}",
-            operations=tuple(OperationSpec(key=key, label=label) for key, label in SPECS),
+            operations=tuple(
+                OperationSpec.model_validate(item) for item in self.supported_operations()
+            ),
         )
 
     def _own_cards(self, config, ids):
@@ -300,10 +354,7 @@ class ChzAdapter:
         }
 
     def execute(self, context, operation, payload):
-        config = ChzConfig.model_validate(context.config)
-        self.validate_binding(context.seller_id, context.config)
-        if context.external_account_id != f"{config.environment}:{config.inn}":
-            raise InvalidInput("Параметры не соответствуют подключенному аккаунту")
+        config = self.config(context)
         if operation == "account.refresh":
             return OperationResult(data={"snapshots": {"account": self.account(config)}})
         if operation == "nk.sync":
@@ -318,4 +369,28 @@ class ChzAdapter:
             if not isinstance(cards, list) or any(not isinstance(c, dict) for c in cards):
                 raise RemoteError(None, "nk_response_invalid")
             return OperationResult(data={"lookup": cards})
-        raise InvalidInput("Операция недоступна в контуре чтения НК")
+        if operation == "codes.check":
+            return OperationResult(
+                data={
+                    "codes": self.check_codes(
+                        config, payload.get("codes"), payload.get("product_group")
+                    )
+                }
+            )
+        if operation == "suz.status":
+            return OperationResult(
+                data={"snapshots": {"suz_status": self.suz_status(config, payload)}}
+            )
+        if operation == "suz.blocks":
+            return OperationResult(
+                data={"snapshots": {"suz_blocks": self.suz_blocks(config, payload)}}
+            )
+        if operation == "suz.receipt":
+            return OperationResult(
+                data={
+                    "snapshots": {
+                        "suz_receipt": self.suz_receipt(config, payload.get("receipt_id"))
+                    }
+                }
+            )
+        raise InvalidInput("Операция требует подготовленного документа или не поддерживается")

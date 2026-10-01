@@ -34,16 +34,91 @@
     </form>
   </details>
   <details><summary>Данные аккаунта и категории НК</summary><pre id="chz-references-json">Справочники загружаются после подключения.</pre></details>
+  <details><summary>Подключение СУЗ</summary>
+    <form id="chz-suz-config">
+      <label>OMS ID<input name="oms_id" required maxlength="36" placeholder="UUID из настроек СУЗ"></label>
+      <label>omsConnection<input name="oms_connection" required maxlength="36" placeholder="UUID внешнего подключения"></label>
+      <button type="submit">Проверить и сохранить СУЗ</button>
+    </form>
+    <p id="chz-suz-state" class="muted">Для СУЗ выберите УКЭП и укажите идентификаторы из своего аккаунта.</p>
+  </details>
 </section>
 <section class="panel">
   <div class="toolbar"><h2>Национальный каталог</h2><span id="chz-count" class="muted"></span></div>
   <form id="chz-search" class="toolbar"><input name="search" placeholder="Название, GTIN или ID НК" aria-label="Поиск карточек"><button type="submit" class="secondary">Найти</button></form>
   <form id="chz-lookup" class="toolbar"><input name="gtin" inputmode="numeric" required pattern="\d{8}|\d{12,14}" placeholder="Запросить доступную карточку по GTIN" aria-label="GTIN"><button type="submit" class="secondary">Запросить НК</button></form>
   <div id="chz-lookup-result"></div>
-  <div class="table-scroll"><table><thead><tr><th>Товар</th><th>GTIN</th><th>Категория</th><th>Статус НК</th><th>Готовность</th></tr></thead><tbody id="chz-products"></tbody></table></div>
+  <div class="toolbar"><button type="button" id="chz-select-page" class="secondary">Выбрать страницу</button><button type="button" id="chz-clear-selection" class="secondary">Снять выбор</button><span id="chz-selected" class="muted">Выбрано: 0</span></div>
+  <div class="table-scroll"><table><thead><tr><th>Выбор</th><th>Товар</th><th>GTIN</th><th>Категория</th><th>Статус НК</th><th>Готовность</th></tr></thead><tbody id="chz-products"></tbody></table></div>
   <div class="toolbar"><button type="button" id="chz-prev" class="secondary">Назад</button><button type="button" id="chz-next" class="secondary">Далее</button></div>
+  <details id="chz-edit-panel"><summary>Массовое изменение атрибутов</summary>
+    <p class="muted">Выберите карточки, загрузите их общий атрибутивный состав и подготовьте правки. НК проверит правила группы и модерации.</p>
+    <button type="button" id="chz-edit-model" class="secondary">Загрузить атрибуты выбранных карточек</button>
+    <form id="chz-edit">
+      <label>Атрибут<select name="attr_id" id="chz-attribute" required><option value="">Сначала загрузите атрибуты</option></select></label>
+      <p id="chz-attribute-hint" class="muted"></p>
+      <label>Новое значение<input name="attr_value" id="chz-attribute-value" required list="chz-presets"><datalist id="chz-presets"></datalist></label>
+      <label>Тип значения<select name="attr_value_type" id="chz-attribute-type"><option value="">Не указан</option></select></label>
+      <label class="check"><input name="moderation" type="checkbox">Отправить правки на модерацию</label>
+      <button type="submit">Посмотреть изменения</button>
+    </form>
+    <details><summary>Несколько значений или удаление атрибутов</summary>
+      <form id="chz-edit-json"><label>Массив good_attrs по спецификации НК<textarea name="attributes" rows="6" required placeholder='[{"attr_id":"…","attr_value":"…"}]'></textarea></label><label class="check"><input name="moderation" type="checkbox">Отправить на модерацию</label><button type="submit">Подготовить пакет</button></form>
+    </details>
+  </details>
+  <div class="toolbar"><label class="check"><input type="checkbox" id="chz-publication-agreement">Согласие на публикацию на сайте НК</label><button type="button" id="chz-prepare-sign">Подготовить публикацию выбранных (до 10)</button></div>
 </section>
+<section class="panel">
+  <h2>СУЗ — заказы кодов и нанесение</h2>
+  <details><summary>Заказать коды маркировки</summary>
+    <form id="chz-order">
+      <label>Товарная группа<select name="product_group" class="chz-group" required></select></label>
+      <label>Номер задания<input name="request_key" required maxlength="120" placeholder="Уникальный номер производственного задания"></label>
+      <label>Позиции products (JSON)<textarea name="products" rows="6" required placeholder='[{"gtin":"…","quantity":1,"serialNumberType":"OPERATOR","templateId":…,"cisType":"UNIT"}]'></textarea></label>
+      <label>Атрибуты заказа вашей группы (JSON)<textarea name="attributes" rows="5" required>{}</textarea></label>
+      <button type="submit">Подготовить заказ</button>
+    </form>
+  </details>
+  <details><summary>Проверить заказ, получить коды или закрыть буфер</summary>
+    <form id="chz-order-buffer">
+      <label>Товарная группа<select name="product_group" class="chz-group" required></select></label>
+      <label>ID заказа СУЗ<input name="order_id" required maxlength="36"></label>
+      <label>GTIN<input name="gtin" required pattern="\d{14}" inputmode="numeric"></label>
+      <label>Количество КМ в блоке<input name="quantity" type="number" min="1" max="5000" value="1" required></label>
+      <label>Действие<select name="action"><option value="status">Проверить буфер</option><option value="blocks">Список выданных блоков</option><option value="codes">Подготовить получение нового блока</option><option value="close">Подготовить закрытие буфера</option></select></label>
+      <button type="submit">Продолжить</button>
+    </form>
+    <pre id="chz-order-status">Статусы заказов появятся после запроса.</pre>
+    <form id="chz-suz-receipt"><label>ID квитанции СУЗ<input name="receipt_id" required maxlength="36"></label><button type="submit">Прочитать квитанцию</button></form>
+    <pre id="chz-receipt-status">Квитанция появится после запроса.</pre>
+    <p class="muted">Закрытие прекращает выдачу оставшихся КМ. После потери ответа при выдаче используйте сверку по ID блока в журнале.</p>
+  </details>
+  <details><summary>Отчёт о нанесении из файла JSON</summary>
+    <form id="chz-utilisation-json"><label>Товарная группа<select name="product_group" class="chz-group" required></select></label><label>UtilisationReport с полными КМ (sntins)<textarea name="document" rows="8" required></textarea></label><button type="submit">Подготовить отчёт</button></form>
+  </details>
+</section>
+<section class="panel">
+  <div class="toolbar"><h2>Коды маркировки</h2><span id="chz-codes-count" class="muted"></span></div>
+  <form id="chz-check-codes"><label>Товарная группа<select name="product_group" class="chz-group" required></select></label><label>КИ или полные КМ, по одному в строке<textarea name="codes" rows="4" required></textarea></label><button type="submit" class="secondary">Проверить в True API</button></form>
+  <div class="table-scroll"><table><thead><tr><th>Выбор</th><th>КИ</th><th>GTIN</th><th>Статус</th><th>Блок СУЗ</th></tr></thead><tbody id="chz-codes"></tbody></table></div>
+  <div class="toolbar"><button type="button" id="chz-codes-prev" class="secondary">Назад</button><button type="button" id="chz-codes-next" class="secondary">Далее</button><button type="button" id="chz-codes-all" class="secondary">Выбрать страницу</button><button type="button" id="chz-codes-clear" class="secondary">Снять выбор</button><span id="chz-codes-selected">Выбрано: 0</span></div>
+  <form id="chz-utilisation-selected"><label>Группа выбранных КМ<select name="product_group" class="chz-group" required></select></label><label>Атрибуты нанесения вашей группы (JSON)<textarea name="attributes" rows="4">{}</textarea></label><button type="submit">Подготовить нанесение выбранных КМ</button></form>
+</section>
+<section class="panel">
+  <h2>Ввод и вывод из оборота</h2>
+  <p class="muted">Документ для единиц товара в JSON. Дополнительные поля вашей группы заполните по True API. Перед отправкой проверяются ИНН, принадлежность КИ и текущие статусы.</p>
+  <form id="chz-true-document">
+    <label>Товарная группа<select name="product_group" class="chz-group" required></select></label>
+    <label>Тип документа<select name="type"><option value="LP_INTRODUCE_GOODS">Ввод в оборот — производство РФ</option><option value="LK_RECEIPT">Вывод из оборота</option></select></label>
+    <button type="button" id="chz-true-template" class="secondary">Создать основу из выбранных КИ</button>
+    <label>Документ JSON<textarea name="document" id="chz-true-json" rows="12" required></textarea></label>
+    <label>Загрузить JSON из файла<input type="file" id="chz-true-file" accept=".json,application/json"></label>
+    <button type="submit">Проверить и подготовить</button>
+  </form>
+</section>
+<section class="panel"><h2>Журнал Честного Знака</h2><p class="muted">Отправка, внешняя обработка и результат — отдельные состояния. Проверка принятых документов продолжается при закрытой странице.</p><div id="chz-documents"></div></section>
 <dialog id="chz-card"><h2 id="chz-card-title"></h2><p id="chz-card-status" class="muted"></p><pre id="chz-card-json"></pre><button type="button" id="chz-card-close" class="secondary">Закрыть</button></dialog>
+<dialog id="chz-document"><h2 id="chz-document-title"></h2><p id="chz-document-state"></p><div id="chz-document-preview"></div><details><summary>Содержимое и результат</summary><pre id="chz-document-json"></pre></details><div id="chz-document-events"></div><div id="chz-document-actions" class="toolbar"></div><form id="chz-reconcile" hidden><label>Внешний ID документа или блока<input name="external_id" maxlength="150"></label><button type="submit">Сверить результат без повторной отправки</button></form><button type="button" id="chz-document-close" class="secondary">Закрыть</button></dialog>
 {% else %}
 <section class="panel empty"><h2>Подключите аккаунт</h2><p>Карточки, категории и статусы появятся после проверки доступа. Данные НК будут принадлежать выбранному продавцу.</p></section>
 {% endif %}

@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from fbe_flow.core.errors import Conflict, InvalidInput
 from fbe_flow.modules.connections import require_connection
+from fbe_flow.modules.marking_documents import SubmissionJournal
 from fbe_flow.modules.records import decode_record
 
 
@@ -12,7 +13,7 @@ def canonical(value):
     return json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 
 
-class Marking:
+class Marking(SubmissionJournal):
     def __init__(self, database, connections, operations, registry):
         self.db = database
         self.connections = connections
@@ -25,8 +26,18 @@ class Marking:
             raise InvalidInput("Выберите подключение Честного Знака")
         return value
 
+    def refresh_capabilities(self):
+        if not any(v["key"] == "chz" for v in self.registry.descriptors()):
+            return
+        operations = self.registry.get("chz").supported_operations()
+        with self.db.connection() as conn:
+            conn.execute(
+                "UPDATE connections SET operations_json=? WHERE adapter_key='chz'",
+                (json.dumps(operations, ensure_ascii=False),),
+            )
+
     def overview(self, seller, connection):
-        self._connection(seller, connection)
+        value = self._connection(seller, connection)
         with self.db.connection() as conn:
             snapshots = {
                 r["key"]: {"value": json.loads(r["value_json"]), "updated_at": r["updated_at"]}
@@ -35,7 +46,17 @@ class Marking:
                     (seller, connection),
                 )
             }
-        return {"snapshots": snapshots}
+        config = value["config"]
+        return {
+            "snapshots": snapshots,
+            "parameters": {
+                "inn": config["inn"],
+                "environment": config.get("environment", "sandbox"),
+                "has_certificate": bool(config.get("certificate")),
+                "oms_id": config.get("oms_id", ""),
+                "oms_connection": config.get("oms_connection", ""),
+            },
+        }
 
     def products(self, seller, connection, offset=0, limit=100, search=""):
         self._connection(seller, connection)
@@ -82,6 +103,8 @@ class Marking:
         return {"items": rows, "total": total, "offset": offset, "limit": limit}
 
     def execute(self, adapter, context, key, payload):
+        if adapter.key == "chz" and key in {"document.submit", "document.poll"}:
+            return self.execute_document(adapter, context, key, payload)
         if adapter.key == "chz" and key == "nk.sync":
             with self.db.connection() as conn:
                 snapshot = conn.execute(
@@ -159,6 +182,25 @@ class Marking:
             self._snapshot(conn, seller, connection_id, key, value)
         if "lookup" in result.data:
             self._snapshot(conn, seller, connection_id, "lookup", result.data["lookup"])
+        if "codes" in result.data:
+            self._apply_codes(conn, job, result.data["codes"])
+        if result.data.get("document_id"):
+            document = conn.execute(
+                "SELECT kind,body_json FROM marking_documents WHERE seller_id=? AND id=?",
+                (seller, result.data["document_id"]),
+            ).fetchone()
+            if (
+                document
+                and document["kind"] in {"nk_feed", "nk_sign"}
+                and result.data.get("state") in {"succeeded", "partial", "rejected"}
+            ):
+                self._invalidate_nk(
+                    conn,
+                    seller,
+                    connection_id,
+                    {"kind": document["kind"], "body": json.loads(document["body_json"])},
+                    result.batch,
+                )
         if progress := result.data.get("sync"):
             complete = progress["complete"]
             for card in progress["cards"]:
@@ -227,6 +269,11 @@ class Marking:
 
     def fail(self, conn, job, code):
         connection = require_connection(conn, job["seller_id"], job["connection_id"])
+        if connection["adapter_key"] == "chz" and job["operation_key"] in {
+            "document.submit",
+            "document.poll",
+        }:
+            self._fail_document(conn, job, code)
         if connection["adapter_key"] == "chz" and job["operation_key"] == "nk.sync":
             row = conn.execute(
                 "SELECT value_json FROM marking_snapshots WHERE seller_id=? "
@@ -251,6 +298,7 @@ class Marking:
             )
 
     def recover(self, conn):
+        self._recover_documents(conn)
         # A queued continuation is already durable. Interrupted reads require an explicit restart.
         for row in conn.execute(
             "SELECT seller_id,connection_id,value_json FROM marking_snapshots WHERE key='sync'"

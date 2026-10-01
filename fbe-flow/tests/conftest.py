@@ -21,7 +21,8 @@ from fbe_flow.integrations.chz.adapter import ChzAdapter
 from fbe_flow.modules.connections import Connections
 from fbe_flow.modules.sellers import Sellers
 
-from .chz_fixtures import FixtureSigner, MemoryVault, Provider
+from .chz_fixtures import FixtureSigner, MemoryVault
+from .chz_workflow_fixtures import WorkflowProvider
 
 
 class FixtureAdapter:
@@ -125,7 +126,7 @@ def client(tmp_path):
 
 @pytest.fixture
 def workspace(tmp_path):
-    vault, signer, provider = MemoryVault(), FixtureSigner(), Provider()
+    vault, signer, provider = MemoryVault(), FixtureSigner(), WorkflowProvider()
     adapter = ChzAdapter(vault, signer, provider)
     app = create_app(
         AppConfig(tmp_path, worker_enabled=False), [adapter], vault=vault, signer=signer

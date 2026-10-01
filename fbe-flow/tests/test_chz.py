@@ -243,22 +243,28 @@ def test_invalid_auth_response_is_rejected(workspace, response):
         adapter.account(ChzConfig.model_validate(connection["config"]))
 
 
-def test_no_mutation_routes_or_operations_are_exposed(workspace):
+def test_mutations_require_a_prepared_document_and_do_not_expose_credentials(workspace):
     state, client, seller, connection, _, _, _ = workspace
     assert {v["key"] for v in connection["operations"]} == {
         "nk.sync",
         "nk.lookup",
         "nk.references",
         "account.refresh",
+        "codes.check",
+        "suz.status",
+        "suz.blocks",
+        "suz.receipt",
+        "document.submit",
+        "document.poll",
     }
     assert (
         client.post(
             f"/api/sellers/{seller}/marking/{connection['id']}/documents", json={}
         ).status_code
-        == 404
+        == 405
     )
     html = client.get(f"/sellers/{seller}/marking").text
-    assert "Национальный каталог" in html and "Массовое изменение" not in html
+    assert "Национальный каталог" in html and "Массовое изменение" in html
     assert "credential_ref" not in html and "private-token" not in html
     response = client.get(f"/api/sellers/{seller}/connections/{connection['id']}").text
     assert "credential_ref" not in response and "config" not in response
