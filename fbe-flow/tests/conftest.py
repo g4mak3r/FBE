@@ -10,6 +10,7 @@ from fbe_flow.core.integrations import AdapterRegistry
 from fbe_flow.core.models import (
     AccountInfo,
     NormalizedBatch,
+    OperationResult,
     OperationSpec,
     Order,
     Product,
@@ -29,6 +30,7 @@ class FixtureAdapter:
     def __init__(self):
         self.contexts = []
         self.called = Event()
+        self.result = None
 
     def describe(self, config):
         if config.get("describe_failure"):
@@ -43,9 +45,11 @@ class FixtureAdapter:
         self.called.set()
         if context.config.get("execution_failure"):
             raise RuntimeError("secret-from-external-response")
+        if self.result is not None:
+            return self.result
         batch = normalized_batch(context.external_account_id)
         if payload.get("broken_relation"):
-            return batch.model_copy(
+            batch = batch.model_copy(
                 update={
                     "orders": (
                         Order(
@@ -56,7 +60,7 @@ class FixtureAdapter:
                     )
                 }
             )
-        return batch
+        return OperationResult(batch=batch)
 
 
 def normalized_batch(title="Product"):

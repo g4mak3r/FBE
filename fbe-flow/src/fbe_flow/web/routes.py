@@ -25,6 +25,7 @@ class OperationInput(Contract):
     connection_id: Text
     operation_key: Text
     payload: dict[str, JsonValue] = Field(default_factory=dict)
+    scope_key: Text | None = None
 
 
 class SettingInput(Contract):
@@ -117,7 +118,7 @@ def operations(request: Request, seller_id: str):
 @router.post("/api/sellers/{seller_id}/operations", status_code=202)
 def enqueue_operation(request: Request, seller_id: str, body: OperationInput):
     return request.app.state.operations.enqueue(
-        seller_id, body.connection_id, body.operation_key, body.payload
+        seller_id, body.connection_id, body.operation_key, body.payload, body.scope_key
     )
 
 

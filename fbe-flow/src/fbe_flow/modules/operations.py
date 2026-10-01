@@ -9,7 +9,7 @@ from pydantic import JsonValue
 from fbe_flow.core.database import Database
 from fbe_flow.core.errors import Conflict, InvalidInput, NotFound
 from fbe_flow.core.integrations import AdapterRegistry
-from fbe_flow.core.models import NormalizedBatch
+from fbe_flow.core.models import OperationResult
 from fbe_flow.modules.connections import Connections, connection_context, require_connection
 from fbe_flow.modules.records import Records
 from fbe_flow.modules.sellers import require_seller
@@ -22,6 +22,7 @@ def decode_operation(row: sqlite3.Row) -> dict:
     result["payload"] = json.loads(result.pop("payload_json"))
     raw = result.pop("result_json")
     result["result"] = json.loads(raw) if raw else None
+    result["scope_key"] = result["scope_key"] or None
     return result
 
 
@@ -52,8 +53,17 @@ class Operations:
             return decode_operation(row)
 
     def enqueue(
-        self, seller_id: str, connection_id: str, key: str, payload: dict[str, JsonValue]
+        self,
+        seller_id: str,
+        connection_id: str,
+        key: str,
+        payload: dict[str, JsonValue],
+        scope_key: str | None = None,
     ) -> dict:
+        if scope_key is not None:
+            scope_key = scope_key.strip()
+            if not scope_key:
+                raise InvalidInput("Ключ области операции не может быть пустым")
         operation_id = str(uuid4())
         try:
             with self.db.connection() as conn:
@@ -63,13 +73,14 @@ class Operations:
                     raise InvalidInput("Операция недоступна этому подключению")
                 conn.execute(
                     "INSERT INTO operations(id, seller_id, connection_id, operation_key, "
-                    "payload_json) VALUES (?, ?, ?, ?, ?)",
+                    "payload_json, scope_key) VALUES (?, ?, ?, ?, ?, ?)",
                     (
                         operation_id,
                         seller_id,
                         connection_id,
                         key,
                         json.dumps(payload, ensure_ascii=False, allow_nan=False),
+                        scope_key or "",
                     ),
                 )
                 row = conn.execute(
@@ -117,21 +128,30 @@ class Operations:
                 job["seller_id"], job["connection_id"]
             )
             adapter = self.registry.get(connection["adapter_key"])
-            batch = NormalizedBatch.model_validate(
+            result = OperationResult.model_validate(
                 adapter.execute(
                     connection_context(connection), job["operation_key"], job["payload"]
                 )
             )
             with self.db.connection() as conn:
                 conn.execute("BEGIN IMMEDIATE")
-                counts = Records(self.db).apply_in_transaction(
-                    conn, job["seller_id"], job["connection_id"], batch
-                )
+                counts = None
+                if result.batch is not None:
+                    counts = Records(self.db).apply_in_transaction(
+                        conn, job["seller_id"], job["connection_id"], result.batch
+                    )
                 updated = conn.execute(
                     "UPDATE operations SET status = 'succeeded', result_json = ?, "
                     "finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
                     "WHERE seller_id = ? AND id = ? AND status = 'running'",
-                    (json.dumps(counts), *scope),
+                    (
+                        json.dumps(
+                            {"counts": counts, "data": result.data},
+                            ensure_ascii=False,
+                            allow_nan=False,
+                        ),
+                        *scope,
+                    ),
                 )
                 if updated.rowcount != 1:
                     raise Conflict("Состояние операции изменилось")

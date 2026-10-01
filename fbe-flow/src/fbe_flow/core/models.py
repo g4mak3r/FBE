@@ -46,6 +46,13 @@ class NormalizedBatch(Contract):
     orders: tuple[Order, ...] = ()
 
 
+class OperationResult(Contract):
+    """An integration outcome, optionally accompanied by normalized source records."""
+
+    batch: NormalizedBatch | None = None
+    data: dict[str, JsonValue] = Field(default_factory=dict)
+
+
 class OperationSpec(Contract):
     key: Text
     label: Text

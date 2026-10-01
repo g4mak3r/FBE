@@ -95,6 +95,22 @@ def test_http_connection_operation_settings_isolation(client):
     assert client.get(f"{other}/settings").json() == {"key": {"a": 1}}
 
 
+def test_http_explicit_scopes_and_validation_preserve_seller_boundary(client):
+    first = create_seller(client, "First")
+    second = create_seller(client, "Second")
+    connection = create_connection(client, first, "account")
+    path = f"/api/sellers/{first}/operations"
+    body = {"connection_id": connection, "operation_key": "fetch", "scope_key": "A"}
+    one = client.post(path, json=body)
+    assert one.status_code == 202
+    assert one.json()["scope_key"] == "A"
+    assert client.post(path, json=body).status_code == 409
+    assert client.post(path, json={**body, "scope_key": "B"}).status_code == 202
+    assert client.post(path, json={**body, "scope_key": "  "}).status_code == 422
+    assert client.post(f"/api/sellers/{second}/operations", json=body).status_code == 404
+    assert client.get(f"/api/sellers/{second}/operations").json() == []
+
+
 @pytest.mark.parametrize("resource", ["connections", "settings", "operations", "records/products"])
 def test_unknown_seller_is_not_an_empty_workspace(client, resource):
     assert client.get(f"/api/sellers/missing/{resource}").status_code == 404

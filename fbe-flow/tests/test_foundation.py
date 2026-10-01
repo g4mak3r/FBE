@@ -22,7 +22,7 @@ def test_migration_is_idempotent_and_foreign_keys_always_enabled(db):
     db.initialize()
     assert Sellers(db).get(seller["id"])["name"] == "Preserved"
     with db.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
 
 
@@ -187,7 +187,7 @@ def test_queue_success_is_scoped_and_deduplicated(db, setup):
     assert operations.run_once()
     finished = operations.get(first, job["id"])
     assert finished["status"] == "succeeded"
-    assert finished["result"] == dict.fromkeys(KINDS, 1)
+    assert finished["result"] == {"counts": dict.fromkeys(KINDS, 1), "data": {}}
     assert finished["started_at"] and finished["finished_at"]
     assert adapter.contexts[0].seller_id == first
     assert adapter.contexts[0].connection_id == a

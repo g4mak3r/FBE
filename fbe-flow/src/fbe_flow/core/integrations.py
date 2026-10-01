@@ -4,7 +4,7 @@ from typing import Protocol
 from pydantic import JsonValue
 
 from fbe_flow.core.errors import InvalidInput
-from fbe_flow.core.models import AccountInfo, ConnectionContext, NormalizedBatch
+from fbe_flow.core.models import AccountInfo, ConnectionContext, OperationResult
 
 
 class IntegrationAdapter(Protocol):
@@ -17,8 +17,8 @@ class IntegrationAdapter(Protocol):
 
     def execute(
         self, context: ConnectionContext, operation: str, payload: dict[str, JsonValue]
-    ) -> NormalizedBatch:
-        """Use bounded I/O timeouts. Return normalized data, never mutate the database."""
+    ) -> OperationResult:
+        """Use bounded I/O timeouts. Return an outcome and optional records; never mutate the DB."""
         ...
 
 
