@@ -17,8 +17,11 @@ from fbe_flow.core.models import (
     Supply,
     Warehouse,
 )
+from fbe_flow.integrations.chz.adapter import ChzAdapter
 from fbe_flow.modules.connections import Connections
 from fbe_flow.modules.sellers import Sellers
+
+from .chz_fixtures import FixtureSigner, MemoryVault, Provider
 
 
 class FixtureAdapter:
@@ -118,3 +121,22 @@ def client(tmp_path):
     with TestClient(app, base_url="http://localhost") as client:
         client.headers["X-FBE-Flow"] = "1"
         yield client
+
+
+@pytest.fixture
+def workspace(tmp_path):
+    vault, signer, provider = MemoryVault(), FixtureSigner(), Provider()
+    adapter = ChzAdapter(vault, signer, provider)
+    app = create_app(
+        AppConfig(tmp_path, worker_enabled=False), [adapter], vault=vault, signer=signer
+    )
+    with TestClient(app, base_url="http://localhost", headers={"X-FBE-Flow": "1"}) as client:
+        seller = app.state.sellers.create("First seller")["id"]
+        reference = vault.put(seller, {"true_token": "private-token"})
+        connection = app.state.connections.create(
+            seller,
+            "chz",
+            "First account",
+            {"inn": provider.inn, "credential_ref": reference, "certificate": "A" * 40},
+        )
+        yield app.state, client, seller, connection, provider, vault, signer
