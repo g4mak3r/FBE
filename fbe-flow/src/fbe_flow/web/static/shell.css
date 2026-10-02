@@ -56,3 +56,13 @@ dialog[id^="wb-"] form { max-width: none; }
 #wb-records .wb-marking-cell { min-width: 240px; }
 #wb-records .wb-marking-cell button { display: block; width: 220px; max-width: 220px; }
 #wb-links button { display: block; margin-top: 12px; }
+.channel-switch { display: inline-flex; padding: 5px; gap: 4px; border: 1px solid #d7dfe9; background: #e9edf3; border-radius: 12px; margin-bottom: 24px; }
+.channel-switch a { padding: 10px 42px; border-radius: 8px; color: #64738a; font-weight: 650; }
+.channel-switch a[aria-current] { color: #263e66; background: white; box-shadow: 0 2px 6px #263e661a; }
+dialog[id^="commerce-"] { width: min(900px, 94vw); max-height: 90vh; overflow: auto; }
+dialog[id^="commerce-"] form { max-width: none; }
+#commerce-records button { margin: 4px 8px 4px 0; }
+#commerce-records .commerce-actions-cell { min-width: 230px; }
+#commerce-records .commerce-actions-cell button { display: block; width: 210px; max-width: 210px; }
+#commerce-order-details article { border-bottom: 1px solid #e9ecf1; padding: 14px 0; }
+#commerce-order-details button { margin: 8px 10px 4px 0; }

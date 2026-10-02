@@ -79,7 +79,7 @@ def test_stage3_upgrade_preserves_full_km_journal_and_inflight_job(tmp_path):
         )
     db.initialize()
     with db.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
         assert (
             conn.execute("SELECT full_code FROM marking_codes WHERE id=?", (code_id,)).fetchone()[0]
@@ -98,7 +98,7 @@ def test_stage3_upgrade_preserves_full_km_journal_and_inflight_job(tmp_path):
             == config
         )
         assert conn.execute("SELECT count(*) FROM wb_actions").fetchone()[0] == 0
-    with sqlite3.connect(tmp_path / "flow.before-v5.sqlite3") as conn:
+    with sqlite3.connect(tmp_path / "flow.before-v6.sqlite3") as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
         assert (
             conn.execute("SELECT full_code FROM marking_codes WHERE id=?", (code_id,)).fetchone()[0]

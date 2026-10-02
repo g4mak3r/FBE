@@ -57,6 +57,19 @@ bindForm("settings-form", async (fields) => {
   await api(`${sellerApi}/settings/${encodeURIComponent(fields.get("key"))}`, "PUT", { value: JSON.parse(fields.get("value")) });
   window.location.reload();
 });
+bindForm("store-name-form", async (fields) => {
+  await api(sellerApi + "/settings/store.name", "PUT", { value: fields.get("name") });
+  window.location.reload();
+});
+for (const link of document.querySelectorAll("[data-marketplace]")) {
+  link.addEventListener("click", async event => {
+    event.preventDefault();
+    try {
+      await api(sellerApi + "/settings/marketplace.selected", "PUT", { value: link.dataset.marketplace });
+      window.location.assign(link.href);
+    } catch (error) { showError(error); }
+  });
+}
 for (const button of document.querySelectorAll(".queue-operation")) {
   button.addEventListener("click", async () => {
     button.disabled = true;

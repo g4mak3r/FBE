@@ -25,6 +25,18 @@ class Settings:
     def set(self, seller_id: str, key: str, value: JsonValue) -> None:
         if not key.strip() or key != key.strip() or len(key) > 120:
             raise InvalidInput("Ключ настройки: от 1 до 120 символов, без пробелов по краям")
+        if key == "store.name":
+            if (
+                not isinstance(value, str)
+                or not 1 <= len(value.strip()) <= 60
+                or any(ord(v) < 32 for v in value)
+            ):
+                raise InvalidInput("Название магазина: от 1 до 60 символов")
+            value = value.strip()
+        if key == "marketplace.selected" and (
+            not isinstance(value, str) or value not in {"wb", "ozon"}
+        ):
+            raise InvalidInput("Выберите WB или Ozon")
         with self.db.connection() as conn:
             require_seller(conn, seller_id)
             conn.execute(

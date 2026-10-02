@@ -19,6 +19,7 @@ from fbe_flow.core.integrations import AdapterRegistry, IntegrationAdapter
 from fbe_flow.integrations import installed_adapters
 from fbe_flow.integrations.chz.http import RemoteError
 from fbe_flow.integrations.chz.signing import WindowsSigner
+from fbe_flow.modules.commerce import Commerce
 from fbe_flow.modules.connections import Connections
 from fbe_flow.modules.fulfillment import Fulfillment
 from fbe_flow.modules.marking import Marking
@@ -26,6 +27,7 @@ from fbe_flow.modules.operations import Operations, Worker
 from fbe_flow.modules.records import Records
 from fbe_flow.modules.sellers import Sellers
 from fbe_flow.modules.settings import Settings
+from fbe_flow.web.commerce import router as commerce_router
 from fbe_flow.web.marking import router as marking_router
 from fbe_flow.web.routes import router
 from fbe_flow.web.wb import router as wb_router
@@ -48,26 +50,37 @@ def create_app(
     connections = Connections(database, registry)
     marking = Marking(database, connections, operations, registry)
     fulfillment = Fulfillment(database, connections, operations, registry, marking)
+    commerce = Commerce(database, connections, operations, registry, marking, fulfillment)
 
     def execute(adapter, context, key, payload):
-        module = fulfillment if adapter.key == "wb" else marking
+        module = (
+            commerce
+            if adapter.key in {"ozon", "kit"}
+            else fulfillment
+            if adapter.key == "wb"
+            else marking
+        )
         return module.execute(adapter, context, key, payload)
 
     def result_handler(conn, job, result):
         marking.apply_result(conn, job, result)
         fulfillment.apply_result(conn, job, result)
+        commerce.apply_result(conn, job, result)
 
     def recovery_handler(conn):
         marking.recover(conn)
         fulfillment.recover(conn)
+        commerce.recover(conn)
 
     def failure_handler(conn, job, code):
         marking.fail(conn, job, code)
         fulfillment.fail(conn, job, code)
+        commerce.fail(conn, job, code)
 
     def idle_handler():
         marking.queue_due()
         fulfillment.queue_due()
+        commerce.queue_due()
 
     operations.executor = execute
     operations.result_handler = result_handler
@@ -81,6 +94,7 @@ def create_app(
             database.initialize()
             marking.refresh_capabilities()
             fulfillment.refresh_capabilities()
+            commerce.refresh_capabilities()
             if config.worker_enabled:
                 worker.start()
             try:
@@ -89,7 +103,7 @@ def create_app(
                 if config.worker_enabled:
                     await asyncio.to_thread(worker.stop)
 
-    app = FastAPI(title="FBE Flow", version="0.4.0", lifespan=lifespan)
+    app = FastAPI(title="FBE Flow", version="0.6.0", lifespan=lifespan)
     app.state.config = config
     app.state.registry = registry
     app.state.database = database
@@ -97,6 +111,7 @@ def create_app(
     app.state.connections = connections
     app.state.marking = marking
     app.state.fulfillment = fulfillment
+    app.state.commerce = commerce
     app.state.vault = vault
     app.state.signer = signer
     app.state.settings = Settings(database)
@@ -109,6 +124,7 @@ def create_app(
     app.include_router(router)
     app.include_router(marking_router)
     app.include_router(wb_router)
+    app.include_router(commerce_router)
 
     @app.exception_handler(RemoteError)
     async def upstream_error(request: Request, exc: RemoteError):

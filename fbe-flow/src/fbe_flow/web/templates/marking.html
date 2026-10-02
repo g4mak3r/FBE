@@ -1,5 +1,5 @@
 {% set chz_connections = connections | selectattr('adapter_key', 'equalto', 'chz') | list %}
-<section class="panel"><h2>Передача кодов в Wildberries</h2><p>После нанесения и подтверждённого ввода в оборот свяжите товар WB с GTIN, назначьте сохранённые коды конкретному заданию и проверьте результат передачи в WB.</p><a class="chz-link" href="/sellers/{{ seller.id }}/wb">Задания, поставки и передача кодов WB →</a></section>
+<section class="panel"><h2>Коды для маркетплейсов и магазина</h2><p>После нанесения и подтверждённого ввода в оборот свяжите товар с GTIN и назначьте полные КМ конкретному заказу. Резерв кода общий для WB, Ozon и магазина. Передача в WB/Ozon подтверждается чтением; в KIT коды вносятся через кабинет.</p><div class="toolbar"><a class="chz-link" href="/sellers/{{ seller.id }}/marketplaces?channel=wb">Коды и поставки WB →</a><a class="chz-link" href="/sellers/{{ seller.id }}/marketplaces?channel=ozon">Коды и отправления Ozon →</a><a class="chz-link" href="/sellers/{{ seller.id }}/store">{{ store_name }} →</a></div></section>
 <section class="panel">
   <details {% if not chz_connections %}open{% endif %}>
     <summary>Подключить аккаунт Честного Знака</summary>

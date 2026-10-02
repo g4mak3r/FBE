@@ -7,7 +7,17 @@ from pydantic import Field, JsonValue
 from fbe_flow.core.models import Contract, Text
 
 router = APIRouter()
-Page = Literal["overview", "connections", "operations", "settings", "marking", "wb"]
+Page = Literal[
+    "overview",
+    "connections",
+    "operations",
+    "settings",
+    "marking",
+    "wb",
+    "ozon",
+    "marketplaces",
+    "store",
+]
 Kind = Literal["products", "orders", "supplies", "warehouses"]
 
 
@@ -36,9 +46,10 @@ def connection_view(connection: dict) -> dict:
     value = {key: value for key, value in connection.items() if key != "config"}
     if connection["adapter_key"] == "chz":
         value["environment"] = connection["config"].get("environment", "sandbox")
-    if connection["adapter_key"] == "wb":
+    if connection["adapter_key"] in {"wb", "ozon", "kit"}:
         value["tin"] = connection["config"]["tin"]
         value["read_only"] = connection["config"]["read_only"]
+        value["tin_verified"] = connection["adapter_key"] != "kit"
     return value
 
 
@@ -46,6 +57,14 @@ def render_shell(request: Request, seller_id: str | None, page: Page):
     state = request.app.state
     seller = state.sellers.get(seller_id) if seller_id else None
     connections = state.connections.list(seller_id) if seller_id else []
+    settings = state.settings.list(seller_id) if seller_id else {}
+    channel = (
+        page
+        if page in {"wb", "ozon"}
+        else request.query_params.get("channel", settings.get("marketplace.selected", "wb"))
+    )
+    if channel not in {"wb", "ozon"}:
+        channel = "wb"
     context = {
         "sellers": state.sellers.list(),
         "seller": seller,
@@ -53,7 +72,9 @@ def render_shell(request: Request, seller_id: str | None, page: Page):
         "connections": [connection_view(item) for item in connections],
         "adapters": state.registry.descriptors(),
         "operations": state.operations.list(seller_id) if seller_id else [],
-        "settings": state.settings.list(seller_id) if seller_id else {},
+        "settings": settings,
+        "channel": channel,
+        "store_name": settings.get("store.name", "Интернет-магазин"),
     }
     return state.templates.TemplateResponse(request=request, name="shell.html", context=context)
 

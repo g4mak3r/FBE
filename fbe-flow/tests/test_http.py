@@ -31,6 +31,8 @@ def test_empty_foundation_and_shell_pages(tmp_path):
         assert client.get("/api/adapters").json() == [
             {"key": "chz", "label": "Честный Знак"},
             {"key": "wb", "label": "Wildberries FBS"},
+            {"key": "ozon", "label": "Ozon FBS"},
+            {"key": "kit", "label": "Яндекс KIT"},
         ]
         assert client.get("/health").json() == {"status": "ok", "worker": "running"}
         seller = create_seller(client, "My seller")

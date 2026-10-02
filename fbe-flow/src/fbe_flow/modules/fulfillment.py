@@ -231,8 +231,8 @@ class Fulfillment:
         _, link = self.order_link(seller, connection, order_id)
         predicate = (
             "c.seller_id=? AND c.connection_id=? AND c.gtin=? AND c.product_group=? "
-            "AND c.full_code IS NOT NULL AND NOT EXISTS (SELECT 1 FROM wb_code_assignments a "
-            "WHERE a.seller_id=c.seller_id AND a.code=c.code)"
+            "AND c.full_code IS NOT NULL AND NOT EXISTS (SELECT 1 FROM code_reservations a "
+            "WHERE a.code=c.code)"
         )
         args = (seller, link["chz_connection_id"], link["gtin"], link["product_group"])
         with self.db.connection() as conn:
