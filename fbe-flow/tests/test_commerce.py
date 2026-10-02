@@ -716,7 +716,7 @@ def test_kit_changed_price_blocks_write_after_preview(commerce):
     state, _, seller, _, _, _, connection, _, _, _, kit, _ = commerce
     product = next(
         v
-        for v in state.commerce.records(seller, connection["id"], "products")["items"]
+        for v in state.commerce.records(seller, connection["id"], "products", limit=200)["items"]
         if v["external_id"] == uid(1)
     )
     action = state.commerce.prepare(
