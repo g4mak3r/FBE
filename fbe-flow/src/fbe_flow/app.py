@@ -20,6 +20,7 @@ from fbe_flow.integrations import installed_adapters
 from fbe_flow.integrations.chz.http import RemoteError
 from fbe_flow.integrations.chz.signing import WindowsSigner
 from fbe_flow.modules.connections import Connections
+from fbe_flow.modules.fulfillment import Fulfillment
 from fbe_flow.modules.marking import Marking
 from fbe_flow.modules.operations import Operations, Worker
 from fbe_flow.modules.records import Records
@@ -27,6 +28,7 @@ from fbe_flow.modules.sellers import Sellers
 from fbe_flow.modules.settings import Settings
 from fbe_flow.web.marking import router as marking_router
 from fbe_flow.web.routes import router
+from fbe_flow.web.wb import router as wb_router
 
 
 def create_app(
@@ -45,17 +47,40 @@ def create_app(
     worker = Worker(operations)
     connections = Connections(database, registry)
     marking = Marking(database, connections, operations, registry)
-    operations.executor = marking.execute
-    operations.result_handler = marking.apply_result
-    operations.recovery_handler = marking.recover
-    operations.failure_handler = marking.fail
-    operations.idle_handler = marking.queue_due
+    fulfillment = Fulfillment(database, connections, operations, registry, marking)
+
+    def execute(adapter, context, key, payload):
+        module = fulfillment if adapter.key == "wb" else marking
+        return module.execute(adapter, context, key, payload)
+
+    def result_handler(conn, job, result):
+        marking.apply_result(conn, job, result)
+        fulfillment.apply_result(conn, job, result)
+
+    def recovery_handler(conn):
+        marking.recover(conn)
+        fulfillment.recover(conn)
+
+    def failure_handler(conn, job, code):
+        marking.fail(conn, job, code)
+        fulfillment.fail(conn, job, code)
+
+    def idle_handler():
+        marking.queue_due()
+        fulfillment.queue_due()
+
+    operations.executor = execute
+    operations.result_handler = result_handler
+    operations.recovery_handler = recovery_handler
+    operations.failure_handler = failure_handler
+    operations.idle_handler = idle_handler
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         with single_instance(config.data_dir):
             database.initialize()
             marking.refresh_capabilities()
+            fulfillment.refresh_capabilities()
             if config.worker_enabled:
                 worker.start()
             try:
@@ -64,13 +89,14 @@ def create_app(
                 if config.worker_enabled:
                     await asyncio.to_thread(worker.stop)
 
-    app = FastAPI(title="FBE Flow", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="FBE Flow", version="0.4.0", lifespan=lifespan)
     app.state.config = config
     app.state.registry = registry
     app.state.database = database
     app.state.sellers = Sellers(database)
     app.state.connections = connections
     app.state.marking = marking
+    app.state.fulfillment = fulfillment
     app.state.vault = vault
     app.state.signer = signer
     app.state.settings = Settings(database)
@@ -82,12 +108,13 @@ def create_app(
     app.mount("/static", StaticFiles(directory=web_dir / "static"), name="static")
     app.include_router(router)
     app.include_router(marking_router)
+    app.include_router(wb_router)
 
     @app.exception_handler(RemoteError)
     async def upstream_error(request: Request, exc: RemoteError):
         return JSONResponse(
             {
-                "detail": f"ЧЗ: {exc.code}. Проверьте доступ и повторите чтение позже",
+                "detail": f"Внешний API: {exc.code}. Проверьте доступ и повторите чтение позже",
                 "code": exc.code,
                 "errors": exc.details,
             },

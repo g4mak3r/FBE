@@ -7,7 +7,7 @@ from pydantic import Field, JsonValue
 from fbe_flow.core.models import Contract, Text
 
 router = APIRouter()
-Page = Literal["overview", "connections", "operations", "settings", "marking"]
+Page = Literal["overview", "connections", "operations", "settings", "marking", "wb"]
 Kind = Literal["products", "orders", "supplies", "warehouses"]
 
 
@@ -36,6 +36,9 @@ def connection_view(connection: dict) -> dict:
     value = {key: value for key, value in connection.items() if key != "config"}
     if connection["adapter_key"] == "chz":
         value["environment"] = connection["config"].get("environment", "sandbox")
+    if connection["adapter_key"] == "wb":
+        value["tin"] = connection["config"]["tin"]
+        value["read_only"] = connection["config"]["read_only"]
     return value
 
 

@@ -1,4 +1,5 @@
 {% set chz_connections = connections | selectattr('adapter_key', 'equalto', 'chz') | list %}
+<section class="panel"><h2>Передача кодов в Wildberries</h2><p>После нанесения и подтверждённого ввода в оборот свяжите товар WB с GTIN, назначьте сохранённые коды конкретному заданию и проверьте результат передачи в WB.</p><a class="chz-link" href="/sellers/{{ seller.id }}/wb">Задания, поставки и передача кодов WB →</a></section>
 <section class="panel">
   <details {% if not chz_connections %}open{% endif %}>
     <summary>Подключить аккаунт Честного Знака</summary>

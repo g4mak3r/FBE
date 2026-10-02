@@ -42,7 +42,7 @@ class WindowsVault:
     @staticmethod
     def _crypt(data: bytes, decrypt: bool = False) -> bytes:
         if os.name != "nt":
-            raise InvalidInput("Хранение ключей ЧЗ доступно на Windows (DPAPI)")
+            raise InvalidInput("Хранение ключей доступно на Windows (DPAPI)")
         from ctypes import wintypes
 
         class Blob(ctypes.Structure):

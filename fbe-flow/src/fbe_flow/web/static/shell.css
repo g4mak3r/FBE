@@ -49,3 +49,10 @@ td { overflow-wrap: anywhere; min-width: 110px; }td:first-child { min-width: 32p
 .chz-warning { color: #8c3029; background: #fff1ef; padding: 12px; border-radius: 6px; }
 hr { border: 0; border-top: 1px solid #e9ecf1; margin: 28px 0; }
 [hidden] { display: none !important; }
+dialog[id^="wb-"] { width: min(900px, 94vw); max-height: 90vh; overflow: auto; }
+dialog[id^="wb-"] form { max-width: none; }
+#wb-order-tools select { flex: 1; min-width: 180px; }
+#wb-records button { margin: 4px 8px 4px 0; max-width: 100%; }
+#wb-records .wb-marking-cell { min-width: 240px; }
+#wb-records .wb-marking-cell button { display: block; width: 220px; max-width: 220px; }
+#wb-links button { display: block; margin-top: 12px; }

@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', path='/shell.css') }}">
   <script defer src="{{ url_for('static', path='/shell.js') }}"></script>
   {% if page == 'marking' %}<script defer src="{{ url_for('static', path='/marking.js') }}"></script>{% endif %}
+  {% if page == 'wb' %}<script defer src="{{ url_for('static', path='/wb.js') }}"></script>{% endif %}
 </head>
 <body data-seller-id="{{ seller.id if seller else '' }}">
   <aside class="sidebar">
@@ -21,17 +22,17 @@
     </select>
     <button id="add-seller" class="secondary" type="button">Добавить продавца</button>
     <nav aria-label="Основная навигация">
-      {% for key, label in [('overview', 'Рабочее пространство'), ('marking', 'Честный Знак'), ('connections', 'Подключения'), ('operations', 'Операции'), ('settings', 'Настройки')] %}
+      {% for key, label in [('overview', 'Рабочее пространство'), ('wb', 'Wildberries FBS'), ('marking', 'Честный Знак'), ('connections', 'Подключения'), ('operations', 'Операции'), ('settings', 'Настройки')] %}
       {% if seller %}
       <a href="/sellers/{{ seller.id }}/{{ key }}" {% if page == key %}aria-current="page"{% endif %}>{{ label }}</a>
       {% else %}<span class="disabled">{{ label }}</span>{% endif %}
       {% endfor %}
     </nav>
-    <div class="sidebar-footer"><span id="worker-status">Проверка состояния…</span><small>FBE Flow · 0.2</small></div>
+    <div class="sidebar-footer"><span id="worker-status">Проверка состояния…</span><small>FBE Flow · 0.4</small></div>
   </aside>
   <main>
     <header><p class="caption">{{ seller.name if seller else 'Первый запуск' }}</p>
-      <h1>{{ {'overview': 'Рабочее пространство', 'marking': 'Честный Знак', 'connections': 'Подключенные системы', 'operations': 'Фоновые операции', 'settings': 'Настройки'}[page] }}</h1>
+      <h1>{{ {'overview': 'Рабочее пространство', 'wb': 'Wildberries FBS', 'marking': 'Честный Знак', 'connections': 'Подключенные системы', 'operations': 'Фоновые операции', 'settings': 'Настройки'}[page] }}</h1>
     </header>
     <p id="feedback" role="status" hidden></p>
     {% if not seller %}
@@ -43,6 +44,8 @@
         <article class="connection"><h3>{{ connection.name }}</h3><p>{{ connection.adapter_key }} · {{ connection.external_account_id }}</p>
           {% if connection.adapter_key == 'chz' %}
           <a class="chz-link" href="/sellers/{{ seller.id }}/marking">Открыть Честный Знак →</a>
+          {% elif connection.adapter_key == 'wb' %}
+          <a class="chz-link" href="/sellers/{{ seller.id }}/wb">Открыть Wildberries FBS →</a>
           {% else %}{% for operation in connection.operations %}
           <button class="queue-operation secondary" type="button" data-connection="{{ connection.id }}" data-operation="{{ operation.key }}">{{ operation.label }}</button>
           {% else %}<small>Нет доступных операций</small>{% endfor %}{% endif %}
@@ -53,7 +56,8 @@
       {% if page == 'connections' %}
       <section class="panel"><h2>Новое подключение</h2>
         <p><a class="chz-link" href="/sellers/{{ seller.id }}/marking">Подключить Честный Знак →</a></p>
-        {% set generic_adapters = adapters | rejectattr('key', 'equalto', 'chz') | list %}
+        <p><a class="chz-link" href="/sellers/{{ seller.id }}/wb">Подключить Wildberries →</a></p>
+        {% set generic_adapters = adapters | rejectattr('key', 'equalto', 'chz') | rejectattr('key', 'equalto', 'wb') | list %}
         {% if generic_adapters %}
         <form id="connection-form">
           <label>Система<select name="adapter_key" required>{% for adapter in generic_adapters %}<option value="{{ adapter.key }}">{{ adapter.label }}</option>{% endfor %}</select></label>
@@ -66,6 +70,7 @@
       </section>
       {% endif %}
       {% if page == 'marking' %}{% include 'marking.html' %}{% endif %}
+      {% if page == 'wb' %}{% include 'wb.html' %}{% endif %}
       {% if page in ['overview', 'operations'] %}
       <section class="panel"><h2>Состояние операций</h2><div id="operations-list" aria-live="polite"><p class="muted">Загрузка…</p></div></section>
       {% endif %}
