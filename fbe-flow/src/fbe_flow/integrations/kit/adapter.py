@@ -47,6 +47,12 @@ class KitAdapter(ProtectedAdapter):
             attributes={"source": value, "variant": value["id"]},
         )
 
+    @staticmethod
+    def catalog_variants(record):
+        from fbe_flow.integrations.catalog import variants
+
+        return variants(record, "kit")
+
     def warehouse(self, value):
         return Warehouse(
             external_id=identifier(value["id"]),

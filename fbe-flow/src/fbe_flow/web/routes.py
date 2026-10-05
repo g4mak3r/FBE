@@ -8,6 +8,7 @@ from fbe_flow.core.models import Contract, Text
 
 router = APIRouter()
 Page = Literal[
+    "catalog",
     "overview",
     "connections",
     "operations",

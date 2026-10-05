@@ -20,6 +20,7 @@ from fbe_flow.integrations import installed_adapters
 from fbe_flow.integrations.chz.http import RemoteError
 from fbe_flow.integrations.chz.signing import WindowsSigner
 from fbe_flow.modules.commerce import Commerce
+from fbe_flow.modules.catalog import Catalog
 from fbe_flow.modules.connections import Connections
 from fbe_flow.modules.fulfillment import Fulfillment
 from fbe_flow.modules.marking import Marking
@@ -28,6 +29,7 @@ from fbe_flow.modules.records import Records
 from fbe_flow.modules.sellers import Sellers
 from fbe_flow.modules.settings import Settings
 from fbe_flow.web.commerce import router as commerce_router
+from fbe_flow.web.catalog import router as catalog_router
 from fbe_flow.web.marking import router as marking_router
 from fbe_flow.web.routes import router
 from fbe_flow.web.wb import router as wb_router
@@ -103,7 +105,7 @@ def create_app(
                 if config.worker_enabled:
                     await asyncio.to_thread(worker.stop)
 
-    app = FastAPI(title="FBE Flow", version="0.6.0", lifespan=lifespan)
+    app = FastAPI(title="FBE Flow", version="0.7.0", lifespan=lifespan)
     app.state.config = config
     app.state.registry = registry
     app.state.database = database
@@ -112,6 +114,7 @@ def create_app(
     app.state.marking = marking
     app.state.fulfillment = fulfillment
     app.state.commerce = commerce
+    app.state.catalog = Catalog(database, connections, registry, marking)
     app.state.vault = vault
     app.state.signer = signer
     app.state.settings = Settings(database)
@@ -125,6 +128,7 @@ def create_app(
     app.include_router(marking_router)
     app.include_router(wb_router)
     app.include_router(commerce_router)
+    app.include_router(catalog_router)
 
     @app.exception_handler(RemoteError)
     async def upstream_error(request: Request, exc: RemoteError):

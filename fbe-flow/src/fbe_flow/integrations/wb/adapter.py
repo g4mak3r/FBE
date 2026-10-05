@@ -2,6 +2,7 @@
 
 import base64
 import json
+import re
 import time
 from threading import Lock
 from urllib.parse import quote
@@ -250,6 +251,25 @@ class WbAdapter:
             category={"id": value.get("subjectID"), "name": value.get("subjectName")},
             attributes={"source": source},
         )
+
+    @staticmethod
+    def catalog_variants(record):
+        from fbe_flow.integrations.catalog import variants
+
+        return variants(record, "wb")
+
+    def catalog_schema(self, context, category):
+        if not re.fullmatch(r"[0-9]{1,12}", category) or int(category) <= 0:
+            raise InvalidInput("Укажите subjectID категории WB")
+        config = self.config(context)
+        self.account(config)
+        attributes = self._call(config, "content", "GET",
+                                "/content/v2/object/charcs/" + category)
+        tnved = self._call(config, "content", "GET", "/content/v2/directory/tnved",
+                           params={"subjectID": int(category)})
+        return {"category": category, "attributes": collection(attributes, "data"),
+                "tnved": collection(tnved, "data"), "dimension_unit": "cm", "weight_unit": "kg",
+                "source_url": "https://dev.wildberries.ru/openapi/work-with-products"}
 
     @staticmethod
     def supply(value):

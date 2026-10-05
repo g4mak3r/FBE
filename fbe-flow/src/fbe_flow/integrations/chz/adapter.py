@@ -268,6 +268,106 @@ class ChzAdapter(ChzWorkflows):
             attributes={"source": card, "etag": etag, "own_card": own},
         )
 
+    @staticmethod
+    def catalog_variants(record):
+        from fbe_flow.integrations.catalog import variants
+
+        return variants(record, "chz")
+
+    def catalog_check(self, context, product):
+        from fbe_flow.integrations.catalog import gtins
+
+        config = self.config(context)
+        account = self.account(config)
+        groups = account.get("productGroups", [])
+        if not isinstance(groups, list) or any(not isinstance(v, str) for v in groups):
+            raise RemoteError(None, "chz_account_groups_invalid")
+        issues, cards, registry = [], [], []
+        if product.get("tnved"):
+            page = self._call(config, "true4", "POST", "/tn-ved/search", body={
+                "tnveds": [product["tnved"]], "page": 0, "limit": 1000,
+            })
+            if not isinstance(page, dict) or not isinstance(page.get("tnveds"), list):
+                raise RemoteError(None, "chz_tnved_response_invalid")
+            if any(not isinstance(v, dict) for v in page["tnveds"]):
+                raise RemoteError(None, "chz_tnved_response_invalid")
+            registry = [v for v in page["tnveds"] if v.get("tnved") == product["tnved"]]
+            if page.get("total", 0) > len(page["tnveds"]) and not page.get("last"):
+                raise RemoteError(None, "chz_tnved_response_incomplete")
+            if not registry:
+                issues.append({
+                    "code": "tnved_not_listed",
+                    "message": "ТН ВЭД не найден в справочнике ЧЗ. Это не подтверждает "
+                               "освобождение от маркировки.",
+                })
+        requested, ready = product["gtins"], {}
+        if requested:
+            result = self._call(config, "true4", "POST", "/product/info",
+                                body={"gtins": requested, "rdInfo": True})
+            if not isinstance(result, dict) or not isinstance(result.get("results"), list):
+                raise RemoteError(None, "chz_product_info_invalid")
+            for item in result["results"]:
+                if (not isinstance(item, dict) or item.get("gtin") not in requested or
+                        item["gtin"] in ready):
+                    raise RemoteError(None, "chz_product_info_invalid")
+                ready[item["gtin"]] = item
+        else:
+            issues.append({"code": "gtin_missing", "message": "В товаре не указан GTIN"})
+        for gtin in requested:
+            value = unwrap(self._call(config, "nk", "GET", "/v3/product", params={"gtin": gtin}))
+            if not isinstance(value, list) or any(not isinstance(v, dict) for v in value):
+                raise RemoteError(None, "nk_response_invalid")
+            found = []
+            for candidate in value:
+                identifiers = candidate.get("identified_by", [])
+                if (not isinstance(identifiers, list) or
+                        any(not isinstance(v, dict) for v in identifiers)):
+                    raise RemoteError(None, "nk_response_invalid")
+                codes = [str(candidate.get("gtin", ""))] + [
+                    str(v.get("value", "")) for v in identifiers if v.get("type") == "gtin"
+                ]
+                if gtin in gtins(codes):
+                    found.append(candidate)
+            if len(found) != 1:
+                issues.append({
+                    "code": "nk_card_missing" if not found else "nk_card_ambiguous",
+                    "gtin": gtin, "message": "Карточка НК не найдена однозначно по GTIN",
+                })
+                continue
+            card = found[0]
+            parsed = {
+                "gtin": gtin, "good_id": str(card.get("good_id", "")), "name": card.get("good_name"),
+                "categories": card.get("categories", []), "product_groups": [],
+                "tnved": [], "okpd2": [], "ready_for_circulation": gtin in ready,
+                "permits": ready.get(gtin, {}).get("permits", {}),
+            }
+            if ready.get(gtin, {}).get("productGroup"):
+                parsed["product_groups"] = [ready[gtin]["productGroup"]]
+            attributes = card.get("good_attrs", [])
+            if not isinstance(attributes, list) or any(not isinstance(a, dict) for a in attributes):
+                raise RemoteError(None, "nk_response_invalid")
+            for attr in attributes:
+                name = re.sub(r"[^а-яa-z0-9]", "", str(attr.get("attr_name", "")).lower())
+                if name in {"кодтнвэд", "тнвэд", "кодокпд2", "окпд2"}:
+                    field = "tnved" if "тнвэд" in name else "okpd2"
+                    parsed[field].append(str(attr.get("attr_value", "")))
+            if not parsed["product_groups"]:
+                issues.append({
+                    "code": "nk_group_unconfirmed", "gtin": gtin,
+                    "message": "True API не подтвердил группу и готовность карточки к обороту",
+                })
+            for field in ("tnved", "okpd2"):
+                if product.get(field) and not parsed[field]:
+                    issues.append({"code": "nk_" + field + "_unconfirmed", "gtin": gtin,
+                                   "message": "В ответе НК не подтверждено поле " + field})
+            cards.append(parsed)
+        return {
+            "account_groups": groups, "tnved_registry": registry,
+            "tnved_groups": sorted({v["pg"] for v in registry if isinstance(v.get("pg"), str)}),
+            "cards": cards, "issues": issues, "environment": config.environment,
+            "source_url": "https://markirovka.crpt.ru/api/v4/true-api",
+        }
+
     def _sync(self, config, payload):
         offset = payload.get("offset", 0)
         if isinstance(offset, bool) or not isinstance(offset, int) or not 0 <= offset <= 10000000:
