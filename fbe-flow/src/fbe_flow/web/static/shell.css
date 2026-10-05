@@ -66,3 +66,31 @@ dialog[id^="commerce-"] form { max-width: none; }
 #commerce-records .commerce-actions-cell button { display: block; width: 210px; max-width: 210px; }
 #commerce-order-details article { border-bottom: 1px solid #e9ecf1; padding: 14px 0; }
 #commerce-order-details button { margin: 8px 10px 4px 0; }
+
+.catalog-tabs { flex-wrap: wrap; margin-bottom: 1rem; }
+.catalog-filter { display: flex; gap: 1rem; flex-wrap: wrap; align-items: end; margin: 1rem 0; }
+.catalog-filter label { flex: 1 1 12rem; }
+.catalog-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .8rem 1.2rem; }
+.catalog-dialog { width: min(1100px,94vw); max-width: 94vw; }
+.catalog-dialog-head { justify-content: space-between; }
+.catalog-dialog-error { color: #9b2727; border: 1px solid #edc7c7; border-radius: .6rem; padding: .8rem; background: #fff4f4; }
+.catalog-attribute, .catalog-condition { display: grid; grid-template-columns: 1fr 9rem 2fr auto; gap: .5rem; align-items: center; margin-bottom: .6rem; }
+.catalog-card { padding: 1rem 0; border-bottom: 1px solid #dce3e4; overflow-wrap: anywhere; }
+.catalog-card:last-child { border-bottom: 0; }
+.table-wrap { max-width: 100%; overflow-x: auto; }
+#catalog-root th, #catalog-root td, .catalog-dialog td { padding: .65rem .75rem; vertical-align: top; }
+#catalog-root table, .catalog-dialog table { width: 100%; border-collapse: collapse; }
+#catalog-root td, .catalog-dialog td { border-bottom: 1px solid #dce3e4; max-width: 25rem; overflow-wrap: anywhere; }
+#catalog-root input[type=checkbox], .catalog-dialog input[type=checkbox] { width: auto; }
+.catalog-dialog pre, #catalog-root pre { max-height: 22rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.catalog-dialog select { max-width: 100%; }
+@media (max-width: 760px) {
+  .catalog-grid, .catalog-attribute, .catalog-condition { grid-template-columns: minmax(0,1fr); }
+  .catalog-dialog { box-sizing: border-box; width: 96vw; max-width: 96vw; padding: 1rem; }
+  .catalog-filter { display: grid; grid-template-columns: minmax(0,1fr); }
+  .catalog-filter label { min-width: 0; }
+  .catalog-tabs button { flex: 1 1 40%; }
+}
+
+.catalog-dialog form { max-width: none; }
+.catalog-dialog { max-height: 90vh; overflow-y: auto; }

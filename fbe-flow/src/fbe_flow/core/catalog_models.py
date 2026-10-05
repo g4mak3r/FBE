@@ -1,4 +1,5 @@
 """Canonical trade items, declared documents and dated classification rules."""
+
 import json
 import re
 from datetime import date
@@ -6,10 +7,12 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import Field, JsonValue, field_validator, model_validator
+
 from fbe_flow.core.models import Contract, Text
 
 Short = Annotated[Text, Field(max_length=240)]
 Measure = Annotated[Decimal, Field(gt=0, le=100000000, max_digits=15, decimal_places=6)]
+
 
 def normalize_gtin(value):
     if not isinstance(value, str) or not re.fullmatch(r"[0-9]{8}|[0-9]{12,14}", value):
@@ -20,6 +23,7 @@ def normalize_gtin(value):
         raise ValueError("Неверная контрольная цифра GTIN")
     return digits
 
+
 class CatalogContract(Contract):
     @field_validator("*", check_fields=False)
     @classmethod
@@ -27,6 +31,7 @@ class CatalogContract(Contract):
         if isinstance(value, str) and re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", value):
             raise ValueError("Недопустимые управляющие символы")
         return value
+
 
 class CatalogProduct(CatalogContract):
     title: Short
@@ -78,6 +83,7 @@ class CatalogProduct(CatalogContract):
             raise ValueError("Масса нетто превышает массу брутто")
         return self
 
+
 class CatalogDocument(CatalogContract):
     kind: Literal["declaration", "certificate", "sgr", "other"]
     number: Short
@@ -99,6 +105,7 @@ class CatalogDocument(CatalogContract):
             raise ValueError("Товары документа повторяются")
         return self
 
+
 class CatalogBatch(CatalogContract):
     product_id: Short
     name: Short
@@ -113,6 +120,7 @@ class CatalogBatch(CatalogContract):
             raise ValueError("Дата производства позже срока годности")
         return self
 
+
 class RuleCondition(CatalogContract):
     field: Short
     operator: Literal["eq", "ne", "gt", "ge", "lt", "le"]
@@ -126,6 +134,7 @@ class RuleCondition(CatalogContract):
         if value == "attributes.":
             raise ValueError("Укажите имя характеристики")
         return value
+
 
 class ClassificationRule(CatalogContract):
     title: Short

@@ -263,13 +263,22 @@ class WbAdapter:
             raise InvalidInput("Укажите subjectID категории WB")
         config = self.config(context)
         self.account(config)
-        attributes = self._call(config, "content", "GET",
-                                "/content/v2/object/charcs/" + category)
-        tnved = self._call(config, "content", "GET", "/content/v2/directory/tnved",
-                           params={"subjectID": int(category)})
-        return {"category": category, "attributes": collection(attributes, "data"),
-                "tnved": collection(tnved, "data"), "dimension_unit": "cm", "weight_unit": "kg",
-                "source_url": "https://dev.wildberries.ru/openapi/work-with-products"}
+        attributes = self._call(config, "content", "GET", "/content/v2/object/charcs/" + category)
+        tnved = self._call(
+            config,
+            "content",
+            "GET",
+            "/content/v2/directory/tnved",
+            params={"subjectID": int(category)},
+        )
+        return {
+            "category": category,
+            "attributes": collection(attributes, "data"),
+            "tnved": collection(tnved, "data"),
+            "dimension_unit": "cm",
+            "weight_unit": "kg",
+            "source_url": "https://dev.wildberries.ru/openapi/work-with-products",
+        }
 
     @staticmethod
     def supply(value):

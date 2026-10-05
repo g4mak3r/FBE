@@ -31,6 +31,7 @@ jobs:
           cache: pip
           cache-dependency-path: fbe-flow/requirements-lock.txt
       - run: python -m pip install -c requirements-lock.txt ".[dev]"
+      - run: node --check src/fbe_flow/web/static/catalog.js
       - run: python -m ruff check .
       - run: python -m ruff format --check .
       - run: python -m pytest

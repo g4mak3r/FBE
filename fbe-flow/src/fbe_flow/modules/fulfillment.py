@@ -225,8 +225,14 @@ class Fulfillment:
                 (seller, connection, str(source.get("chrtId")), str(source.get("nmId"))),
             ).fetchone()
             if row:
-                check_source_binding(conn, seller, row["product_id"], row["chrt_id"],
-                                     row["gtin"], row["product_group"])
+                check_source_binding(
+                    conn,
+                    seller,
+                    row["product_id"],
+                    row["chrt_id"],
+                    row["gtin"],
+                    row["product_group"],
+                )
         if not row:
             raise InvalidInput("Сначала свяжите размер товара WB с GTIN Честного Знака")
         return order, dict(row)
@@ -432,8 +438,14 @@ class Fulfillment:
             if not link:
                 raise InvalidInput("Сначала свяжите размер товара WB с GTIN Честного Знака")
             with self.db.connection() as conn:
-                check_source_binding(conn, seller, link["product_id"], link["chrt_id"],
-                                     link["gtin"], link["product_group"])
+                check_source_binding(
+                    conn,
+                    seller,
+                    link["product_id"],
+                    link["chrt_id"],
+                    link["gtin"],
+                    link["product_group"],
+                )
             codes = self.marking.validate_code_selection(
                 seller, link["chz_connection_id"], payload["code_ids"], full=True
             )
@@ -684,11 +696,19 @@ class Fulfillment:
 
     def _check_chz(self, seller, body):
         with self.db.connection() as conn:
-            link = conn.execute("SELECT * FROM wb_links WHERE seller_id=? AND id=?",
-                                (seller, body.get("link_id", ""))).fetchone()
+            link = conn.execute(
+                "SELECT * FROM wb_links WHERE seller_id=? AND id=?",
+                (seller, body.get("link_id", "")),
+            ).fetchone()
             if link:
-                check_source_binding(conn, seller, link["product_id"], link["chrt_id"],
-                                     body["gtin"], body["product_group"])
+                check_source_binding(
+                    conn,
+                    seller,
+                    link["product_id"],
+                    link["chrt_id"],
+                    body["gtin"],
+                    body["product_group"],
+                )
         chz = self.marking._connection(seller, body["chz_connection_id"])
         wb_codes = self.marking.validate_code_selection(
             seller, chz["id"], body["code_ids"], full=True

@@ -6,6 +6,7 @@
   <title>FBE Flow</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/shell.css') }}">
   <script defer src="{{ url_for('static', path='/shell.js') }}"></script>
+  {% if page == 'catalog' %}<script defer src="{{ url_for('static', path='/catalog.js') }}"></script>{% endif %}
   {% if page == 'marking' %}<script defer src="{{ url_for('static', path='/marking.js') }}"></script>{% endif %}
   {% if page in ['wb', 'marketplaces'] and channel == 'wb' %}<script defer src="{{ url_for('static', path='/wb.js') }}"></script>{% endif %}
   {% if page in ['ozon', 'marketplaces'] and channel == 'ozon' or page == 'store' %}<script defer src="{{ url_for('static', path='/commerce.js') }}"></script>{% endif %}
@@ -23,17 +24,17 @@
     </select>
     <button id="add-seller" class="secondary" type="button">Добавить продавца</button>
     <nav aria-label="Основная навигация">
-      {% for key, label in [('overview', 'Рабочее пространство'), ('marketplaces', 'Маркетплейсы'), ('store', store_name), ('marking', 'Честный Знак'), ('connections', 'Подключения'), ('operations', 'Операции'), ('settings', 'Настройки')] %}
+      {% for key, label in [('overview', 'Рабочее пространство'), ('catalog', 'Ассортимент'), ('marketplaces', 'Маркетплейсы'), ('store', store_name), ('marking', 'Честный Знак'), ('connections', 'Подключения'), ('operations', 'Операции'), ('settings', 'Настройки')] %}
       {% if seller %}
       <a href="/sellers/{{ seller.id }}/{{ key }}" {% if page == key or key == 'marketplaces' and page in ['wb', 'ozon'] %}aria-current="page"{% endif %}>{{ label }}</a>
       {% else %}<span class="disabled">{{ label }}</span>{% endif %}
       {% endfor %}
     </nav>
-    <div class="sidebar-footer"><span id="worker-status">Проверка состояния…</span><small>FBE Flow · 0.6</small></div>
+    <div class="sidebar-footer"><span id="worker-status">Проверка состояния…</span><small>FBE Flow · 0.7</small></div>
   </aside>
   <main>
     <header><p class="caption">{{ seller.name if seller else 'Первый запуск' }}</p>
-      <h1>{{ store_name if page == 'store' else {'overview': 'Рабочее пространство', 'wb': 'Маркетплейсы', 'ozon': 'Маркетплейсы', 'marketplaces': 'Маркетплейсы', 'marking': 'Честный Знак', 'connections': 'Подключенные системы', 'operations': 'Фоновые операции', 'settings': 'Настройки'}[page] }}</h1>
+      <h1>{{ store_name if page == 'store' else {'catalog': 'Ассортимент', 'overview': 'Рабочее пространство', 'wb': 'Маркетплейсы', 'ozon': 'Маркетплейсы', 'marketplaces': 'Маркетплейсы', 'marking': 'Честный Знак', 'connections': 'Подключенные системы', 'operations': 'Фоновые операции', 'settings': 'Настройки'}[page] }}</h1>
     </header>
     <p id="feedback" role="status" hidden></p>
     {% if not seller %}
@@ -76,6 +77,8 @@
         {% endif %}
       </section>
       {% endif %}
+      {% if page == 'catalog' %}{% include 'catalog.html' %}{% endif %}
+      {% if page in ['marking', 'wb', 'ozon', 'marketplaces', 'store'] %}<p><a class="chz-link" href="/sellers/{{ seller.id }}/catalog">Открыть единый ассортимент →</a></p>{% endif %}
       {% if page == 'marking' %}{% include 'marking.html' %}{% endif %}
       {% if page in ['wb', 'ozon', 'marketplaces'] %}
       <div class="channel-switch" aria-label="Маркетплейс">

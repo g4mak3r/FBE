@@ -55,7 +55,7 @@ def test_upgrade_from_v2_backs_up_and_preserves_existing_identity_and_scope(tmp_
         )
         conn.execute("INSERT INTO sellers(id,name) VALUES (?,?)", (str(uuid4()), "Preserved"))
     database.initialize()
-    backup_path = tmp_path / "flow.before-v6.sqlite3"
+    backup_path = tmp_path / "flow.before-v7.sqlite3"
     assert backup_path.exists()
     with sqlite3.connect(backup_path) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
@@ -129,7 +129,7 @@ def test_upgrade_from_stage1_v3_preserves_cards_connection_refs_and_queue(tmp_pa
             ).fetchone()
         ) == ("queued", "original-scope")
         assert not conn.execute("PRAGMA foreign_key_check").fetchall()
-    with sqlite3.connect(tmp_path / "flow.before-v6.sqlite3") as conn:
+    with sqlite3.connect(tmp_path / "flow.before-v7.sqlite3") as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
         assert conn.execute("SELECT id FROM products").fetchone()[0] == product
 

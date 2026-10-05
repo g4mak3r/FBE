@@ -35,6 +35,8 @@ jobs:
               for index in range(0, len(text), 4000):
                   print("FBE_FORMAT " + name + " " + str(index) + " " + json.dumps(text[index:index + 4000], ensure_ascii=False))
           PY
+      - name: JavaScript syntax
+        run: node --check src/fbe_flow/web/static/catalog.js
       - name: Python lint
         run: python -m ruff check .
       - name: Full regression tests

@@ -81,27 +81,47 @@ class OzonAdapter(ProtectedAdapter):
         if len(parts) != 2 or any(not v.isascii() or not v.isdigit() for v in parts):
             raise InvalidInput("Для Ozon укажите description_category_id:type_id")
         description, type_id = (positive(int(v)) for v in parts)
-        response = self._call(config, "POST", "/v1/description-category/attribute", body={
-            "description_category_id": description, "type_id": type_id, "language": "DEFAULT",
-        })
+        response = self._call(
+            config,
+            "POST",
+            "/v1/description-category/attribute",
+            body={
+                "description_category_id": description,
+                "type_id": type_id,
+                "language": "DEFAULT",
+            },
+        )
         if not isinstance(response, dict) or not isinstance(response.get("result"), list):
             raise RemoteError(None, "ozon_attribute_schema_invalid")
-        return {"category": category, "attributes": response["result"],
-                "description_category_id": description, "type_id": type_id,
-                "dimension_unit": "mm", "weight_unit": "g",
-                "source_url": "https://docs.ozon.ru/api/seller/"}
+        return {
+            "category": category,
+            "attributes": response["result"],
+            "description_category_id": description,
+            "type_id": type_id,
+            "dimension_unit": "mm",
+            "weight_unit": "g",
+            "source_url": "https://docs.ozon.ru/api/seller/",
+        }
 
     def catalog_dictionary(self, context, category, attribute_id, last_value_id=0):
         schema = self.catalog_schema(context, category)
-        if not any(v.get("id") == attribute_id and v.get("dictionary_id")
-                   for v in schema["attributes"]):
+        if not any(
+            v.get("id") == attribute_id and v.get("dictionary_id") for v in schema["attributes"]
+        ):
             raise InvalidInput("У характеристики нет словаря в этой категории")
-        response = self._call(self.config(context), "POST",
-                              "/v1/description-category/attribute/values", body={
-            "description_category_id": schema["description_category_id"],
-            "type_id": schema["type_id"], "attribute_id": positive(attribute_id),
-            "language": "DEFAULT", "limit": 100, "last_value_id": last_value_id,
-        })
+        response = self._call(
+            self.config(context),
+            "POST",
+            "/v1/description-category/attribute/values",
+            body={
+                "description_category_id": schema["description_category_id"],
+                "type_id": schema["type_id"],
+                "attribute_id": positive(attribute_id),
+                "language": "DEFAULT",
+                "limit": 100,
+                "last_value_id": last_value_id,
+            },
+        )
         if not isinstance(response, dict) or not isinstance(response.get("result"), list):
             raise RemoteError(None, "ozon_attribute_dictionary_invalid")
         return response
@@ -109,10 +129,16 @@ class OzonAdapter(ProtectedAdapter):
     def catalog_details(self, context, record):
         config = self.config(context)
         self.account(config)
-        response = self._call(config, "POST", "/v4/product/info/attributes", body={
-            "filter": {"product_id": [record["external_id"]], "visibility": "ALL"},
-            "limit": 100, "sort_dir": "ASC",
-        })
+        response = self._call(
+            config,
+            "POST",
+            "/v4/product/info/attributes",
+            body={
+                "filter": {"product_id": [record["external_id"]], "visibility": "ALL"},
+                "limit": 100,
+                "sort_dir": "ASC",
+            },
+        )
         if not isinstance(response, dict) or not isinstance(response.get("result"), list):
             raise RemoteError(None, "ozon_product_attributes_invalid")
         values = [v for v in response["result"] if str(v.get("id")) == record["external_id"]]

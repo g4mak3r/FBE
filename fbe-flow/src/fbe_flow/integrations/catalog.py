@@ -1,7 +1,10 @@
 """Read-only source-card projections; canonical fields require operator review."""
+
 import re
 from decimal import Decimal, InvalidOperation
+
 from fbe_flow.core.catalog_models import normalize_gtin
+
 
 def gtins(values):
     result = []
@@ -12,6 +15,7 @@ def gtins(values):
             pass
     return list(dict.fromkeys(result))
 
+
 def amount(value, scale=1):
     try:
         number = Decimal(str(value)) * scale
@@ -19,11 +23,16 @@ def amount(value, scale=1):
     except (InvalidOperation, TypeError, ValueError):
         return None
 
+
 def variants(record, channel):
     source = record.get("attributes", {}).get("source", {})
     identifiers = record.get("identifiers", {})
-    fields = {"title": record["title"], "sku": record.get("sku") or record["external_id"],
-              "barcodes": identifiers.get("barcode", []), "attributes": {}}
+    fields = {
+        "title": record["title"],
+        "sku": record.get("sku") or record["external_id"],
+        "barcodes": identifiers.get("barcode", []),
+        "attributes": {},
+    }
     fields["gtins"] = gtins(identifiers.get("gtin", []) + fields["barcodes"])
     if channel == "wb":
         fields.update(brand=source.get("brand"), description=source.get("description"))
@@ -31,8 +40,10 @@ def variants(record, channel):
             fields["marking_attestation"] = source["kizMarked"]
         dimensions = source.get("dimensions") or {}
         for target, key, scale in [
-            ("length_mm", "length", 10), ("width_mm", "width", 10),
-            ("height_mm", "height", 10), ("gross_weight_g", "weightBrutto", 1000),
+            ("length_mm", "length", 10),
+            ("width_mm", "width", 10),
+            ("height_mm", "height", 10),
+            ("gross_weight_g", "weightBrutto", 1000),
         ]:
             fields[target] = amount(dimensions.get(key), scale)
         for attribute in source.get("characteristics", []):
@@ -48,17 +59,27 @@ def variants(record, channel):
             if size.get("chrtID") is None:
                 continue
             codes, key = size.get("skus", []), str(size["chrtID"])
-            result.append({
-                "key": key, "label": str(size.get("techSize") or key),
-                "fields": {**fields, "sku": fields["sku"] + ":" + key, "family": fields["sku"],
-                           "barcodes": codes, "gtins": gtins(codes)},
-                "identifiers": {"barcode": codes, "gtin": gtins(codes)},
-            })
+            result.append(
+                {
+                    "key": key,
+                    "label": str(size.get("techSize") or key),
+                    "fields": {
+                        **fields,
+                        "sku": fields["sku"] + ":" + key,
+                        "family": fields["sku"],
+                        "barcodes": codes,
+                        "gtins": gtins(codes),
+                    },
+                    "identifiers": {"barcode": codes, "gtin": gtins(codes)},
+                }
+            )
         return result
     if channel == "ozon":
         if source.get("dimension_unit") == "mm":
             for target, key in [
-                ("length_mm", "depth"), ("width_mm", "width"), ("height_mm", "height")
+                ("length_mm", "depth"),
+                ("width_mm", "width"),
+                ("height_mm", "height"),
             ]:
                 fields[target] = amount(source.get(key))
         if source.get("weight_unit") == "g":
@@ -78,5 +99,11 @@ def variants(record, channel):
             if normalized == "состав":
                 fields["composition"] = value
     key = str(record.get("attributes", {}).get("variant", ""))
-    return [{"key": key, "label": record["title"], "fields": fields,
-             "identifiers": {**identifiers, "gtin": fields["gtins"]}}]
+    return [
+        {
+            "key": key,
+            "label": record["title"],
+            "fields": fields,
+            "identifiers": {**identifiers, "gtin": fields["gtins"]},
+        }
+    ]

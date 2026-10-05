@@ -19,8 +19,8 @@ from fbe_flow.core.integrations import AdapterRegistry, IntegrationAdapter
 from fbe_flow.integrations import installed_adapters
 from fbe_flow.integrations.chz.http import RemoteError
 from fbe_flow.integrations.chz.signing import WindowsSigner
-from fbe_flow.modules.commerce import Commerce
 from fbe_flow.modules.catalog import Catalog
+from fbe_flow.modules.commerce import Commerce
 from fbe_flow.modules.connections import Connections
 from fbe_flow.modules.fulfillment import Fulfillment
 from fbe_flow.modules.marking import Marking
@@ -28,8 +28,8 @@ from fbe_flow.modules.operations import Operations, Worker
 from fbe_flow.modules.records import Records
 from fbe_flow.modules.sellers import Sellers
 from fbe_flow.modules.settings import Settings
-from fbe_flow.web.commerce import router as commerce_router
 from fbe_flow.web.catalog import router as catalog_router
+from fbe_flow.web.commerce import router as commerce_router
 from fbe_flow.web.marking import router as marking_router
 from fbe_flow.web.routes import router
 from fbe_flow.web.wb import router as wb_router

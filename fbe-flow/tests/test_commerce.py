@@ -600,7 +600,7 @@ def test_stage4_migration_preserves_wb_reservations_full_codes_and_running_jobs(
     assert (
         state.fulfillment.action(seller, action["id"])["body"]["sgtins"] == action["body"]["sgtins"]
     )
-    backup = state.database.path.parent / "flow.before-v6.sqlite3"
+    backup = state.database.path.parent / "flow.before-v7.sqlite3"
     with sqlite3.connect(backup) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
         assert conn.execute("SELECT count(*) FROM wb_code_assignments").fetchone()[0] == 2

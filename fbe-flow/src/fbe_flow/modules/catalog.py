@@ -1,4 +1,5 @@
 """Seller-scoped canonical assortment and atomic local reviewable changes."""
+
 import base64
 import hashlib
 import json
@@ -9,21 +10,30 @@ from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
 from pydantic import ValidationError
+
 from fbe_flow.core.catalog_models import (
-    CatalogBatch, CatalogDocument, CatalogProduct, ClassificationRule, normalize_gtin,
+    CatalogBatch,
+    CatalogDocument,
+    CatalogProduct,
+    ClassificationRule,
+    normalize_gtin,
 )
 from fbe_flow.core.errors import Conflict, InvalidInput, NotFound
+from fbe_flow.core.models import NormalizedBatch
 from fbe_flow.modules.connections import connection_context, require_connection
 from fbe_flow.modules.records import Records, decode_record
-from fbe_flow.core.models import NormalizedBatch
 from fbe_flow.modules.sellers import require_seller
 
+
 def encode(value):
-    return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True,
-                      separators=(",", ":"))
+    return json.dumps(
+        value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")
+    )
+
 
 def digest(value):
     return hashlib.sha256(encode(value).encode()).hexdigest()
+
 
 def validate(model, value):
     try:
@@ -32,6 +42,7 @@ def validate(model, value):
         messages = [f"{'.'.join(map(str, v['loc']))}: {v['msg']}" for v in exc.errors()]
         raise InvalidInput("; ".join(messages)) from exc
 
+
 def decode(row):
     if row is None:
         raise NotFound("Запись ассортимента не найдена")
@@ -39,13 +50,18 @@ def decode(row):
     data = json.loads(value.pop("data_json"))
     return {**data, **value}
 
+
 def require_product(conn, seller, product_id):
-    return decode(conn.execute(
-        "SELECT * FROM catalog_products WHERE seller_id=? AND id=?", (seller, product_id)
-    ).fetchone())
+    return decode(
+        conn.execute(
+            "SELECT * FROM catalog_products WHERE seller_id=? AND id=?", (seller, product_id)
+        ).fetchone()
+    )
+
 
 def clean_product(value):
     return {k: value[k] for k in CatalogProduct.model_fields if k in value}
+
 
 def check_source_binding(conn, seller, source_id, variant, gtin, group):
     row = conn.execute(
@@ -60,10 +76,14 @@ def check_source_binding(conn, seller, source_id, variant, gtin, group):
         if product["product_group"] and product["product_group"] != group:
             raise Conflict("Группа ЧЗ отличается от группы в ассортименте")
 
+
 class Catalog:
     def __init__(self, database, connections, registry, marking):
         self.db, self.connections, self.registry, self.marking = (
-            database, connections, registry, marking
+            database,
+            connections,
+            registry,
+            marking,
         )
 
     @staticmethod
@@ -93,10 +113,15 @@ class Catalog:
             total = conn.execute(
                 "SELECT count(*) FROM catalog_products WHERE " + where, args
             ).fetchone()[0]
-            items = [decode(r) for r in conn.execute(
-                "SELECT * FROM catalog_products WHERE " + where +
-                " ORDER BY title,id LIMIT ? OFFSET ?", (*args, limit, offset),
-            )]
+            items = [
+                decode(r)
+                for r in conn.execute(
+                    "SELECT * FROM catalog_products WHERE "
+                    + where
+                    + " ORDER BY title,id LIMIT ? OFFSET ?",
+                    (*args, limit, offset),
+                )
+            ]
         return {"items": items, "total": total, "offset": offset, "limit": limit}
 
     def stats(self, seller):
@@ -106,13 +131,15 @@ class Catalog:
                 "SELECT count(*) AS total,sum(json_extract(data_json,'$.archived')=0) AS active,"
                 "sum(json_array_length(data_json,'$.gtins')=0) AS without_gtin,"
                 "sum(json_extract(data_json,'$.tnved') IS NULL) AS without_tnved "
-                "FROM catalog_products WHERE seller_id=?", (seller,),
+                "FROM catalog_products WHERE seller_id=?",
+                (seller,),
             ).fetchone()
             result = {k: v or 0 for k, v in dict(row).items()}
             result["unlinked_sources"] = conn.execute(
                 "SELECT count(*) FROM products p WHERE p.seller_id=? AND NOT EXISTS "
                 "(SELECT 1 FROM catalog_links l WHERE l.seller_id=p.seller_id "
-                "AND l.source_product_id=p.id)", (seller,),
+                "AND l.source_product_id=p.id)",
+                (seller,),
             ).fetchone()[0]
             return result
 
@@ -124,8 +151,9 @@ class Catalog:
         except sqlite3.IntegrityError as exc:
             raise Conflict("Артикул или GTIN уже используется у этого продавца") from exc
 
-    def save_product_in(self, conn, seller, data, product_id=None, revision=None,
-                        origin="editor", create_id=None):
+    def save_product_in(
+        self, conn, seller, data, product_id=None, revision=None, origin="editor", create_id=None
+    ):
         require_seller(conn, seller)
         data = validate(CatalogProduct, data)
         before = require_product(conn, seller, product_id) if product_id else None
@@ -136,12 +164,14 @@ class Catalog:
                 if conn.execute(
                     "SELECT 1 FROM catalog_batches b JOIN catalog_units u "
                     "ON u.seller_id=b.seller_id AND u.batch_id=b.id "
-                    "WHERE b.seller_id=? AND b.product_id=? LIMIT 1", (seller, product_id),
+                    "WHERE b.seller_id=? AND b.product_id=? LIMIT 1",
+                    (seller, product_id),
                 ).fetchone():
                     raise Conflict("У товара есть экземпляры с кодами; GTIN и группу менять нельзя")
                 for link in conn.execute(
                     "SELECT source_product_id,variant FROM catalog_links "
-                    "WHERE seller_id=? AND product_id=?", (seller, product_id),
+                    "WHERE seller_id=? AND product_id=?",
+                    (seller, product_id),
                 ):
                     for table, key in (("wb_links", "chrt_id"), ("commerce_links", "variant")):
                         used = conn.execute(
@@ -149,8 +179,10 @@ class Catalog:
                             f"AND product_id=? AND {key}=?",
                             (seller, link["source_product_id"], link["variant"]),
                         ).fetchone()
-                        if used and (used["gtin"] not in data["gtins"] or
-                                     data["product_group"] not in {None, used["product_group"]}):
+                        if used and (
+                            used["gtin"] not in data["gtins"]
+                            or data["product_group"] not in {None, used["product_group"]}
+                        ):
                             raise Conflict("Изменение противоречит действующей связи площадки с ЧЗ")
             if clean_product(before) == data:
                 return before
@@ -174,9 +206,17 @@ class Catalog:
                 "INSERT INTO catalog_identifiers(seller_id,product_id,kind,value) VALUES(?,?,?,?)",
                 [(seller, product_id, kind, v) for v in dict.fromkeys(values)],
             )
-        self.event(conn, seller, product_id, "product.saved", {
-            "origin": origin, "before": clean_product(before) if before else None, "after": data,
-        })
+        self.event(
+            conn,
+            seller,
+            product_id,
+            "product.saved",
+            {
+                "origin": origin,
+                "before": clean_product(before) if before else None,
+                "after": data,
+            },
+        )
         return require_product(conn, seller, product_id)
 
     def product(self, seller, product_id):
@@ -185,17 +225,24 @@ class Catalog:
 
     def detail(self, seller, product_id):
         result = self.product(seller, product_id)
-        result.update(links=self.links(seller, product_id),
-                      documents=self.documents(seller, product_id),
-                      batches=self.batches(seller, product_id))
+        result.update(
+            links=self.links(seller, product_id),
+            documents=self.documents(seller, product_id),
+            batches=self.batches(seller, product_id),
+        )
         with self.db.connection() as conn:
-            result["events"] = [decode_record(r) for r in conn.execute(
-                "SELECT * FROM catalog_events WHERE seller_id=? AND product_id=? "
-                "ORDER BY created_at DESC,id DESC LIMIT 100", (seller, product_id),
-            )]
+            result["events"] = [
+                decode_record(r)
+                for r in conn.execute(
+                    "SELECT * FROM catalog_events WHERE seller_id=? AND product_id=? "
+                    "ORDER BY created_at DESC,id DESC LIMIT 100",
+                    (seller, product_id),
+                )
+            ]
             row = conn.execute(
                 "SELECT * FROM catalog_checks WHERE seller_id=? AND product_id=? "
-                "ORDER BY created_at DESC,id DESC LIMIT 1", (seller, product_id),
+                "ORDER BY created_at DESC,id DESC LIMIT 1",
+                (seller, product_id),
             ).fetchone()
             result["check"] = decode_record(row) if row else None
         if result["check"]:
@@ -203,11 +250,12 @@ class Catalog:
             connection = self.connections.get(seller, check["connection_id"])
             created = datetime.fromisoformat(check["created_at"].replace("Z", "+00:00"))
             check["stale"] = (
-                check["product_revision"] != result["revision"] or
-                check["rules_digest"] != digest(self.rules(seller)) or
-                datetime.now(UTC) - created > timedelta(hours=24) or
-                check["value"].get("checked_on") != date.today().isoformat() or
-                check["value"]["observed"].get("connection_digest") != digest(connection["config"])
+                check["product_revision"] != result["revision"]
+                or check["rules_digest"] != digest(self.rules(seller))
+                or datetime.now(UTC) - created > timedelta(hours=24)
+                or check["value"].get("checked_on") != date.today().isoformat()
+                or check["value"]["observed"].get("connection_digest")
+                != digest(connection["config"])
             )
         return result
 
@@ -230,19 +278,28 @@ class Catalog:
             require_seller(conn, seller)
             if connection:
                 require_connection(conn, seller, connection)
-            total = conn.execute(
-                "SELECT count(*) FROM products p WHERE " + where, args
-            ).fetchone()[0]
-            items = [decode_record(r) for r in conn.execute(
-                "SELECT p.*,c.adapter_key,c.name AS connection_name FROM products p "
-                "JOIN connections c ON c.seller_id=p.seller_id AND c.id=p.connection_id WHERE "
-                + where + " ORDER BY p.title,p.id LIMIT ? OFFSET ?", (*args, limit, offset),
-            )]
+            total = conn.execute("SELECT count(*) FROM products p WHERE " + where, args).fetchone()[
+                0
+            ]
+            items = [
+                decode_record(r)
+                for r in conn.execute(
+                    "SELECT p.*,c.adapter_key,c.name AS connection_name FROM products p "
+                    "JOIN connections c ON c.seller_id=p.seller_id AND c.id=p.connection_id WHERE "
+                    + where
+                    + " ORDER BY p.title,p.id LIMIT ? OFFSET ?",
+                    (*args, limit, offset),
+                )
+            ]
             for item in items:
-                item["links"] = [dict(r) for r in conn.execute(
-                    "SELECT product_id,variant FROM catalog_links "
-                    "WHERE seller_id=? AND source_product_id=?", (seller, item["id"]),
-                )]
+                item["links"] = [
+                    dict(r)
+                    for r in conn.execute(
+                        "SELECT product_id,variant FROM catalog_links "
+                        "WHERE seller_id=? AND source_product_id=?",
+                        (seller, item["id"]),
+                    )
+                ]
                 item["variants"] = self.variants(item, item["adapter_key"])
                 suggestions = {}
                 for variant in item["variants"]:
@@ -256,7 +313,8 @@ class Catalog:
                                 "SELECT p.id,p.title,p.sku FROM catalog_identifiers i "
                                 "JOIN catalog_products p ON p.seller_id=i.seller_id "
                                 "AND p.id=i.product_id WHERE i.seller_id=? AND i.kind='gtin' "
-                                "AND i.value=?", (seller, code),
+                                "AND i.value=?",
+                                (seller, code),
                             ):
                                 suggestions[row["id"]] = dict(row)
                 item["suggestions"] = list(suggestions.values())
@@ -264,11 +322,21 @@ class Catalog:
 
     def variants(self, source, key):
         reader = getattr(self.registry.get(key), "catalog_variants", None)
-        return reader(source) if reader else [{
-            "key": "", "label": source["title"],
-            "fields": {"title": source["title"], "sku": source["sku"] or source["external_id"]},
-            "identifiers": source["identifiers"],
-        }]
+        return (
+            reader(source)
+            if reader
+            else [
+                {
+                    "key": "",
+                    "label": source["title"],
+                    "fields": {
+                        "title": source["title"],
+                        "sku": source["sku"] or source["external_id"],
+                    },
+                    "identifiers": source["identifiers"],
+                }
+            ]
+        )
 
     def refresh_source(self, seller, source_id):
         source = Records(self.db).get(seller, "products", source_id)
@@ -289,19 +357,25 @@ class Catalog:
             if require_connection(conn, seller, connection["id"])["config"] != connection["config"]:
                 raise Conflict("Подключение изменилось во время чтения")
             Records(self.db).apply_in_transaction(
-                conn, seller, connection["id"], NormalizedBatch(products=(product,)))
+                conn, seller, connection["id"], NormalizedBatch(products=(product,))
+            )
         return Records(self.db).get(seller, "products", source_id)
 
     def links(self, seller, product_id):
         with self.db.connection() as conn:
             require_product(conn, seller, product_id)
-            return [decode_record(r) for r in conn.execute(
-                "SELECT l.*,p.title,p.external_id,p.connection_id,p.category_json,c.adapter_key,"
-                "c.name AS connection_name FROM catalog_links l JOIN products p "
-                "ON p.seller_id=l.seller_id AND p.id=l.source_product_id JOIN connections c "
-                "ON c.seller_id=p.seller_id AND c.id=p.connection_id "
-                "WHERE l.seller_id=? AND l.product_id=?", (seller, product_id),
-            )]
+            return [
+                decode_record(r)
+                for r in conn.execute(
+                    "SELECT l.*,p.title,p.external_id,p.connection_id,"
+                    "p.category_json,c.adapter_key,"
+                    "c.name AS connection_name FROM catalog_links l JOIN products p "
+                    "ON p.seller_id=l.seller_id AND p.id=l.source_product_id JOIN connections c "
+                    "ON c.seller_id=p.seller_id AND c.id=p.connection_id "
+                    "WHERE l.seller_id=? AND l.product_id=?",
+                    (seller, product_id),
+                )
+            ]
 
     def link_in(self, conn, seller, product_id, source_id, variant, overrides=None):
         product = require_product(conn, seller, product_id)
@@ -312,8 +386,10 @@ class Catalog:
             raise NotFound("Исходная карточка не найдена")
         source = decode_record(row)
         connection = require_connection(conn, seller, source["connection_id"])
-        chosen = next((v for v in self.variants(source, connection["adapter_key"])
-                       if v["key"] == variant), None)
+        chosen = next(
+            (v for v in self.variants(source, connection["adapter_key"]) if v["key"] == variant),
+            None,
+        )
         if not chosen:
             raise Conflict("Вариант отсутствует в актуальной исходной карточке")
         if product["archived"]:
@@ -329,10 +405,13 @@ class Catalog:
         for table, key in (("wb_links", "chrt_id"), ("commerce_links", "variant")):
             bound = conn.execute(
                 f"SELECT gtin,product_group FROM {table} WHERE seller_id=? "
-                f"AND product_id=? AND {key}=?", (seller, source_id, variant),
+                f"AND product_id=? AND {key}=?",
+                (seller, source_id, variant),
             ).fetchone()
-            if bound and (bound["gtin"] not in product["gtins"] or
-                          product["product_group"] not in {None, bound["product_group"]}):
+            if bound and (
+                bound["gtin"] not in product["gtins"]
+                or product["product_group"] not in {None, bound["product_group"]}
+            ):
                 raise Conflict("Привязка противоречит действующей связи площадки с ЧЗ")
         previous = conn.execute(
             "SELECT * FROM catalog_links WHERE seller_id=? AND source_product_id=? AND variant=?",
@@ -358,9 +437,17 @@ class Catalog:
                 "overrides_json) VALUES(?,?,?,?,?,?)",
                 (link_id, seller, product_id, source_id, variant, encode(overrides)),
             )
-        self.event(conn, seller, product_id, "source.linked", {
-            "source_product_id": source_id, "variant": variant, "overrides": overrides,
-        })
+        self.event(
+            conn,
+            seller,
+            product_id,
+            "source.linked",
+            {
+                "source_product_id": source_id,
+                "variant": variant,
+                "overrides": overrides,
+            },
+        )
         return {"id": link_id, "product_id": product_id}
 
     def link(self, seller, product_id, source_id, variant="", overrides=None):
@@ -407,19 +494,24 @@ class Catalog:
                 "WHERE seller_id=? AND product_id=?)"
             )
             args.extend([seller, product_id])
-        items = [decode(r) for r in conn.execute(
-            "SELECT * FROM catalog_documents WHERE " + where + " ORDER BY created_at,id", args
-        )]
+        items = [
+            decode(r)
+            for r in conn.execute(
+                "SELECT * FROM catalog_documents WHERE " + where + " ORDER BY created_at,id", args
+            )
+        ]
         files = {}
         for row in conn.execute(
             "SELECT id,document_id,filename,mime,digest,length(content) AS size "
-            "FROM catalog_files WHERE seller_id=?", (seller,),
+            "FROM catalog_files WHERE seller_id=?",
+            (seller,),
         ):
             files.setdefault(row["document_id"], []).append(dict(row))
         for item in items:
             item["files"] = files.get(item["id"], [])
-            item["expired"] = bool(item["expires_on"] and
-                                   item["expires_on"] < date.today().isoformat())
+            item["expired"] = bool(
+                item["expires_on"] and item["expires_on"] < date.today().isoformat()
+            )
         return items
 
     def documents(self, seller, product_id=None):
@@ -436,10 +528,12 @@ class Catalog:
             require_product(conn, seller, product)
         before = None
         if document_id:
-            before = decode(conn.execute(
-                "SELECT * FROM catalog_documents WHERE seller_id=? AND id=?",
-                (seller, document_id),
-            ).fetchone())
+            before = decode(
+                conn.execute(
+                    "SELECT * FROM catalog_documents WHERE seller_id=? AND id=?",
+                    (seller, document_id),
+                ).fetchone()
+            )
             if type(revision) is not int or before["revision"] != revision:
                 raise Conflict("Документ изменился. Обновите данные")
             if all(before[k] == v for k, v in data.items()):
@@ -464,12 +558,21 @@ class Catalog:
             [(seller, document_id, p) for p in data["product_ids"]],
         )
         for product in set(data["product_ids"] + (before["product_ids"] if before else [])):
-            self.event(conn, seller, product, "document.saved", {
-                "document_id": document_id, "data": data,
-            })
-        return decode(conn.execute(
-            "SELECT * FROM catalog_documents WHERE seller_id=? AND id=?", (seller, document_id)
-        ).fetchone())
+            self.event(
+                conn,
+                seller,
+                product,
+                "document.saved",
+                {
+                    "document_id": document_id,
+                    "data": data,
+                },
+            )
+        return decode(
+            conn.execute(
+                "SELECT * FROM catalog_documents WHERE seller_id=? AND id=?", (seller, document_id)
+            ).fetchone()
+        )
 
     def save_document(self, seller, data, document_id=None, revision=None):
         with self.db.connection() as conn:
@@ -481,8 +584,11 @@ class Catalog:
             raise InvalidInput("Файл: до 10 МБ; имя: до 200 символов")
         if any(c in filename for c in ("/", "\\", "\r", "\n", "\x00")):
             raise InvalidInput("Недопустимое имя файла")
-        signatures = [(b"%PDF-", "application/pdf"),
-                      (b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg")]
+        signatures = [
+            (b"%PDF-", "application/pdf"),
+            (b"\x89PNG\r\n\x1a\n", "image/png"),
+            (b"\xff\xd8\xff", "image/jpeg"),
+        ]
         mime = next((mime for prefix, mime in signatures if content.startswith(prefix)), None)
         if not mime:
             raise InvalidInput("Документ должен быть PDF, PNG или JPEG")
@@ -496,8 +602,15 @@ class Catalog:
             conn.execute(
                 "INSERT INTO catalog_files(id,seller_id,document_id,filename,mime,digest,content)"
                 " VALUES(?,?,?,?,?,?,?)",
-                (file_id, seller, document_id, filename, mime,
-                 hashlib.sha256(content).hexdigest(), content),
+                (
+                    file_id,
+                    seller,
+                    document_id,
+                    filename,
+                    mime,
+                    hashlib.sha256(content).hexdigest(),
+                    content,
+                ),
             )
         return {"id": file_id, "filename": filename, "size": len(content)}
 
@@ -516,11 +629,16 @@ class Catalog:
         if product["archived"]:
             raise Conflict("Товар находится в архиве")
         if batch_id:
-            before = decode(conn.execute(
-                "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
-            ).fetchone())
-            if (type(revision) is not int or before["revision"] != revision or
-                    before["product_id"] != data["product_id"]):
+            before = decode(
+                conn.execute(
+                    "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
+                ).fetchone()
+            )
+            if (
+                type(revision) is not int
+                or before["revision"] != revision
+                or before["product_id"] != data["product_id"]
+            ):
                 raise Conflict("Партия изменилась или относится к другому товару")
             count = conn.execute(
                 "SELECT count(*) FROM catalog_units WHERE seller_id=? AND batch_id=?",
@@ -532,7 +650,8 @@ class Catalog:
                 return before
             conn.execute(
                 "UPDATE catalog_batches SET data_json=?,revision=revision+1 "
-                "WHERE seller_id=? AND id=?", (encode(data), seller, batch_id),
+                "WHERE seller_id=? AND id=?",
+                (encode(data), seller, batch_id),
             )
         else:
             batch_id = create_id or str(uuid4())
@@ -540,11 +659,19 @@ class Catalog:
                 "INSERT INTO catalog_batches(id,seller_id,product_id,data_json) VALUES(?,?,?,?)",
                 (batch_id, seller, data["product_id"], encode(data)),
             )
-        self.event(conn, seller, data["product_id"], "batch.saved",
-                   {"batch_id": batch_id, "data": data}, batch_id)
-        return decode(conn.execute(
-            "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
-        ).fetchone())
+        self.event(
+            conn,
+            seller,
+            data["product_id"],
+            "batch.saved",
+            {"batch_id": batch_id, "data": data},
+            batch_id,
+        )
+        return decode(
+            conn.execute(
+                "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
+            ).fetchone()
+        )
 
     def save_batch(self, seller, data, batch_id=None, revision=None):
         with self.db.connection() as conn:
@@ -557,22 +684,27 @@ class Catalog:
         if product_id:
             where += " AND product_id=?"
             args.append(product_id)
-        items = [decode(r) for r in conn.execute(
-            "SELECT * FROM catalog_batches WHERE " + where + " ORDER BY created_at,id", args
-        )]
-        counts = dict(conn.execute(
-            "SELECT batch_id,count(*) FROM catalog_units WHERE seller_id=? GROUP BY batch_id",
-            (seller,),
-        ).fetchall())
+        items = [
+            decode(r)
+            for r in conn.execute(
+                "SELECT * FROM catalog_batches WHERE " + where + " ORDER BY created_at,id", args
+            )
+        ]
+        counts = dict(
+            conn.execute(
+                "SELECT batch_id,count(*) FROM catalog_units WHERE seller_id=? GROUP BY batch_id",
+                (seller,),
+            ).fetchall()
+        )
         events = {}
         for row in conn.execute(
             "SELECT batch_id,kind,count(DISTINCT code_id) AS count FROM catalog_events "
-            "WHERE seller_id=? AND code_id IS NOT NULL GROUP BY batch_id,kind", (seller,),
+            "WHERE seller_id=? AND code_id IS NOT NULL GROUP BY batch_id,kind",
+            (seller,),
         ):
             events.setdefault(row["batch_id"], {})[row["kind"]] = row["count"]
         for item in items:
-            item.update(assigned=counts.get(item["id"], 0),
-                        local_events=events.get(item["id"], {}))
+            item.update(assigned=counts.get(item["id"], 0), local_events=events.get(item["id"], {}))
         return items
 
     def batches(self, seller, product_id=None):
@@ -587,9 +719,12 @@ class Catalog:
         try:
             with self.db.connection() as conn:
                 conn.execute("BEGIN IMMEDIATE")
-                batch = decode(conn.execute(
-                    "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
-                ).fetchone())
+                batch = decode(
+                    conn.execute(
+                        "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?",
+                        (seller, batch_id),
+                    ).fetchone()
+                )
                 product = require_product(conn, seller, batch["product_id"])
                 if product["archived"]:
                     raise Conflict("Товар находится в архиве")
@@ -605,8 +740,10 @@ class Catalog:
                     ).fetchone()
                     if not code:
                         raise NotFound("Код не найден")
-                    if (code["gtin"] not in product["gtins"] or
-                            product["product_group"] not in {None, code["product_group"]}):
+                    if code["gtin"] not in product["gtins"] or product["product_group"] not in {
+                        None,
+                        code["product_group"],
+                    }:
                         raise Conflict("Код относится к другому товару или группе")
                     conn.execute(
                         "INSERT INTO catalog_units(seller_id,batch_id,code_id) VALUES(?,?,?)",
@@ -619,48 +756,71 @@ class Catalog:
 
     @staticmethod
     def code_selection(code_ids):
-        if (not isinstance(code_ids, list) or not 1 <= len(code_ids) <= 500 or
-                any(not isinstance(v, str) for v in code_ids) or
-                len(set(code_ids)) != len(code_ids)):
+        if (
+            not isinstance(code_ids, list)
+            or not 1 <= len(code_ids) <= 500
+            or any(not isinstance(v, str) for v in code_ids)
+            or len(set(code_ids)) != len(code_ids)
+        ):
             raise InvalidInput("Выберите от 1 до 500 разных кодов")
 
     def batch_codes(self, seller, batch_id, offset=0, limit=100):
         self.page(offset, limit)
         with self.db.connection() as conn:
-            batch = decode(conn.execute(
-                "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
-            ).fetchone())
+            batch = decode(
+                conn.execute(
+                    "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
+                ).fetchone()
+            )
             total = conn.execute(
                 "SELECT count(*) FROM catalog_units WHERE seller_id=? AND batch_id=?",
                 (seller, batch_id),
             ).fetchone()[0]
-            items = [decode_record(r) for r in conn.execute(
-                "SELECT c.id,c.code,c.gtin,c.product_group,c.external_status,c.attributes_json "
-                "FROM catalog_units u JOIN marking_codes c ON c.seller_id=u.seller_id "
-                "AND c.id=u.code_id WHERE u.seller_id=? AND u.batch_id=? "
-                "ORDER BY c.id LIMIT ? OFFSET ?", (seller, batch_id, limit, offset),
-            )]
+            items = [
+                decode_record(r)
+                for r in conn.execute(
+                    "SELECT c.id,c.code,c.gtin,c.product_group,c.external_status,c.attributes_json "
+                    "FROM catalog_units u JOIN marking_codes c ON c.seller_id=u.seller_id "
+                    "AND c.id=u.code_id WHERE u.seller_id=? AND u.batch_id=? "
+                    "ORDER BY c.id LIMIT ? OFFSET ?",
+                    (seller, batch_id, limit, offset),
+                )
+            ]
             for item in items:
-                item["local_events"] = [decode_record(r) for r in conn.execute(
-                    "SELECT kind,created_at,data_json FROM catalog_events "
-                    "WHERE seller_id=? AND batch_id=? AND code_id=? ORDER BY created_at,id",
-                    (seller, batch_id, item["id"]),
-                )]
-            return {"batch": batch, "items": items, "total": total, "offset": offset, "limit": limit}
+                item["local_events"] = [
+                    decode_record(r)
+                    for r in conn.execute(
+                        "SELECT kind,created_at,data_json FROM catalog_events "
+                        "WHERE seller_id=? AND batch_id=? AND code_id=? ORDER BY created_at,id",
+                        (seller, batch_id, item["id"]),
+                    )
+                ]
+            return {
+                "batch": batch,
+                "items": items,
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+            }
 
     def available_codes(self, seller, batch_id, connection_id=None, offset=0, limit=100):
         self.page(offset, limit)
         with self.db.connection() as conn:
-            batch = decode(conn.execute(
-                "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
-            ).fetchone())
+            batch = decode(
+                conn.execute(
+                    "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
+                ).fetchone()
+            )
             product = require_product(conn, seller, batch["product_id"])
-            if connection_id and require_connection(
-                    conn, seller, connection_id)["adapter_key"] != "chz":
+            if (
+                connection_id
+                and require_connection(conn, seller, connection_id)["adapter_key"] != "chz"
+            ):
                 raise InvalidInput("Выберите подключение ЧЗ")
             where = (
-                "c.seller_id=? AND c.gtin IN (" + ",".join("?" for _ in product["gtins"]) +
-                ") AND NOT EXISTS (SELECT 1 FROM catalog_units u "
+                "c.seller_id=? AND c.gtin IN ("
+                + ",".join("?" for _ in product["gtins"])
+                + ") AND NOT EXISTS (SELECT 1 FROM catalog_units u "
                 "WHERE u.seller_id=c.seller_id AND u.code_id=c.id)"
             )
             args = [seller, *product["gtins"]]
@@ -673,55 +833,77 @@ class Catalog:
             total = conn.execute(
                 "SELECT count(*) FROM marking_codes c WHERE " + where, args
             ).fetchone()[0]
-            items = [dict(r) for r in conn.execute(
-                "SELECT c.id,c.code,c.gtin,c.connection_id,c.external_status "
-                "FROM marking_codes c WHERE " + where + " ORDER BY c.id LIMIT ? OFFSET ?",
-                (*args, limit, offset),
-            )]
+            items = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT c.id,c.code,c.gtin,c.connection_id,c.external_status "
+                    "FROM marking_codes c WHERE " + where + " ORDER BY c.id LIMIT ? OFFSET ?",
+                    (*args, limit, offset),
+                )
+            ]
             return {"items": items, "total": total, "offset": offset, "limit": limit}
 
     def record_code_event(self, seller, batch_id, code_ids, kind, actor, note=""):
         self.code_selection(code_ids)
-        if (kind not in {"printed", "applied", "quality_checked"} or not actor.strip() or
-                len(actor) > 240 or len(note) > 2000):
+        if (
+            kind not in {"printed", "applied", "quality_checked"}
+            or not actor.strip()
+            or len(actor) > 240
+            or len(note) > 2000
+        ):
             raise InvalidInput("Укажите действие и ответственного оператора")
         with self.db.connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            batch = decode(conn.execute(
-                "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
-            ).fetchone())
+            batch = decode(
+                conn.execute(
+                    "SELECT * FROM catalog_batches WHERE seller_id=? AND id=?", (seller, batch_id)
+                ).fetchone()
+            )
             for code_id in code_ids:
                 if not conn.execute(
                     "SELECT 1 FROM catalog_units WHERE seller_id=? AND batch_id=? AND code_id=?",
                     (seller, batch_id, code_id),
                 ).fetchone():
                     raise Conflict("Код не назначен этой партии")
-                self.event(conn, seller, batch["product_id"], kind,
-                           {"actor": actor.strip(), "note": note, "confirmation": "operator"},
-                           batch_id, code_id)
+                self.event(
+                    conn,
+                    seller,
+                    batch["product_id"],
+                    kind,
+                    {"actor": actor.strip(), "note": note, "confirmation": "operator"},
+                    batch_id,
+                    code_id,
+                )
         return {"recorded": len(code_ids), "external_status_changed": False}
 
     def rules(self, seller):
         with self.db.connection() as conn:
             require_seller(conn, seller)
-            return [decode(r) for r in conn.execute(
-                "SELECT * FROM catalog_rules WHERE seller_id=? ORDER BY id", (seller,),
-            )]
+            return [
+                decode(r)
+                for r in conn.execute(
+                    "SELECT * FROM catalog_rules WHERE seller_id=? ORDER BY id",
+                    (seller,),
+                )
+            ]
 
     def save_rule_in(self, conn, seller, data, rule_id=None, revision=None, create_id=None):
         data = validate(ClassificationRule, data)
         require_seller(conn, seller)
         if rule_id:
-            old = decode(conn.execute(
-                "SELECT * FROM catalog_rules WHERE seller_id=? AND id=?", (seller, rule_id)
-            ).fetchone())
+            old = decode(
+                conn.execute(
+                    "SELECT * FROM catalog_rules WHERE seller_id=? AND id=?", (seller, rule_id)
+                ).fetchone()
+            )
             if type(revision) is not int or old["revision"] != revision:
                 raise Conflict("Правило изменилось. Обновите данные")
             if all(old[k] == v for k, v in data.items()):
                 return old
             conn.execute(
                 "UPDATE catalog_rules SET data_json=?,revision=revision+1 "
-                "WHERE seller_id=? AND id=?", (encode(data), seller, rule_id),
+                "WHERE seller_id=? AND id=?",
+                (encode(data), seller, rule_id),
             )
         else:
             rule_id = create_id or str(uuid4())
@@ -729,9 +911,11 @@ class Catalog:
                 "INSERT INTO catalog_rules(id,seller_id,data_json) VALUES(?,?,?)",
                 (rule_id, seller, encode(data)),
             )
-        return decode(conn.execute(
-            "SELECT * FROM catalog_rules WHERE seller_id=? AND id=?", (seller, rule_id)
-        ).fetchone())
+        return decode(
+            conn.execute(
+                "SELECT * FROM catalog_rules WHERE seller_id=? AND id=?", (seller, rule_id)
+            ).fetchone()
+        )
 
     def save_rule(self, seller, data, rule_id=None, revision=None):
         with self.db.connection() as conn:
@@ -745,11 +929,22 @@ class Catalog:
         except (TypeError, ValueError) as exc:
             raise InvalidInput("Неверная дата классификации") from exc
         candidates, incomplete = [], []
-        numeric = {"volume_ml", "net_weight_g", "gross_weight_g", "length_mm", "width_mm",
-                   "height_mm", "package_quantity", "shelf_life_days"}
+        numeric = {
+            "volume_ml",
+            "net_weight_g",
+            "gross_weight_g",
+            "length_mm",
+            "width_mm",
+            "height_mm",
+            "package_quantity",
+            "shelf_life_days",
+        }
         for rule in self.rules(seller):
-            if (not rule["enabled"] or rule["valid_from"] > on_date or
-                    (rule["valid_until"] and rule["valid_until"] < on_date)):
+            if (
+                not rule["enabled"]
+                or rule["valid_from"] > on_date
+                or (rule["valid_until"] and rule["valid_until"] < on_date)
+            ):
                 continue
             if not product.get("tnved"):
                 incomplete.append(rule["id"])
@@ -765,8 +960,11 @@ class Catalog:
             match = True
             for condition in rule["conditions"]:
                 key = condition["field"]
-                value = (product.get("attributes", {}).get(key[11:]) if key.startswith(
-                    "attributes.") else product.get(key))
+                value = (
+                    product.get("attributes", {}).get(key[11:])
+                    if key.startswith("attributes.")
+                    else product.get(key)
+                )
                 if value is None:
                     incomplete.append(rule["id"])
                     match = False
@@ -775,9 +973,14 @@ class Catalog:
                 try:
                     if op not in {"eq", "ne"} or key in numeric:
                         value, expected = Decimal(str(value)), Decimal(str(expected))
-                    result = {"eq": operator.eq, "ne": operator.ne, "gt": operator.gt,
-                              "ge": operator.ge, "lt": operator.lt, "le": operator.le}[op](
-                                  value, expected)
+                    result = {
+                        "eq": operator.eq,
+                        "ne": operator.ne,
+                        "gt": operator.gt,
+                        "ge": operator.ge,
+                        "lt": operator.lt,
+                        "le": operator.le,
+                    }[op](value, expected)
                 except (TypeError, ValueError, InvalidOperation):
                     incomplete.append(rule["id"])
                     result = False
@@ -788,8 +991,12 @@ class Catalog:
                 candidates.append(rule)
         base = {"product_group": None, "marking_required": None}
         if incomplete:
-            return {**base, "state": "incomplete", "rules": candidates,
-                    "missing_rule_inputs": sorted(set(incomplete))}
+            return {
+                **base,
+                "state": "incomplete",
+                "rules": candidates,
+                "missing_rule_inputs": sorted(set(incomplete)),
+            }
         if not candidates:
             return {**base, "state": "unknown", "rules": []}
         priority = max(v["priority"] for v in candidates)
@@ -798,8 +1005,12 @@ class Catalog:
         if len(outcomes) != 1:
             return {**base, "state": "ambiguous", "rules": selected}
         group, required = next(iter(outcomes))
-        return {"state": "matched", "rules": selected, "product_group": group,
-                "marking_required": required}
+        return {
+            "state": "matched",
+            "rules": selected,
+            "product_group": group,
+            "marking_required": required,
+        }
 
     def refresh_schema(self, seller, connection_id, category):
         connection = self.connections.get(seller, connection_id)
@@ -827,16 +1038,25 @@ class Catalog:
     def schemas(self, seller):
         with self.db.connection() as conn:
             require_seller(conn, seller)
-            return [decode_record(r) for r in conn.execute(
-                "SELECT * FROM catalog_schemas WHERE seller_id=? ORDER BY connection_id,category_key",
-                (seller,),
-            )]
+            return [
+                decode_record(r)
+                for r in conn.execute(
+                    "SELECT * FROM catalog_schemas WHERE seller_id=? "
+                    "ORDER BY connection_id,category_key",
+                    (seller,),
+                )
+            ]
 
     def dictionary(self, seller, connection_id, category, attribute_id, cursor=0):
         connection = self.connections.get(seller, connection_id)
         method = getattr(self.registry.get(connection["adapter_key"]), "catalog_dictionary", None)
-        if (not method or type(attribute_id) is not int or attribute_id <= 0 or
-                type(cursor) is not int or cursor < 0):
+        if (
+            not method
+            or type(attribute_id) is not int
+            or attribute_id <= 0
+            or type(cursor) is not int
+            or cursor < 0
+        ):
             raise InvalidInput("Укажите характеристику со словарём")
         return method(connection_context(connection), category, attribute_id, cursor)
 
@@ -852,52 +1072,103 @@ class Catalog:
         observed["connection_digest"] = digest(connection["config"])
         issues = list(observed.get("issues", []))
         registry_groups = observed.get("tnved_groups", [])
-        expected = (classification["product_group"] or product["product_group"] or
-                    (registry_groups[0] if len(registry_groups) == 1 else None))
+        expected = (
+            classification["product_group"]
+            or product["product_group"]
+            or (registry_groups[0] if len(registry_groups) == 1 else None)
+        )
         if classification["state"] != "matched":
-            issues.append({"code": "classification_" + classification["state"],
-                           "message": "Правила не дали однозначной классификации"})
-        if (classification["product_group"] and product["product_group"] and
-                classification["product_group"] != product["product_group"]):
-            issues.append({"code": "declared_group_mismatch",
-                           "message": "Группа товара отличается от результата правила"})
+            issues.append(
+                {
+                    "code": "classification_" + classification["state"],
+                    "message": "Правила не дали однозначной классификации",
+                }
+            )
+        if (
+            classification["product_group"]
+            and product["product_group"]
+            and classification["product_group"] != product["product_group"]
+        ):
+            issues.append(
+                {
+                    "code": "declared_group_mismatch",
+                    "message": "Группа товара отличается от результата правила",
+                }
+            )
         if not expected:
             issues.append({"code": "group_missing", "message": "Не определена группа ЧЗ"})
         elif expected not in observed.get("account_groups", []):
-            issues.append({"code": "group_not_connected",
-                           "message": "Товарная группа не подключена к аккаунту ЧЗ"})
+            issues.append(
+                {
+                    "code": "group_not_connected",
+                    "message": "Товарная группа не подключена к аккаунту ЧЗ",
+                }
+            )
         if expected and registry_groups and expected not in registry_groups:
-            issues.append({"code": "tnved_group_mismatch",
-                           "message": "Группа отличается от справочника ТН ВЭД ЧЗ"})
+            issues.append(
+                {
+                    "code": "tnved_group_mismatch",
+                    "message": "Группа отличается от справочника ТН ВЭД ЧЗ",
+                }
+            )
         for card in observed.get("cards", []):
             if expected and card["product_groups"] and expected not in card["product_groups"]:
-                issues.append({"code": "nk_group_mismatch", "gtin": card["gtin"],
-                               "message": "Группа карточки НК отличается от ожидаемой"})
+                issues.append(
+                    {
+                        "code": "nk_group_mismatch",
+                        "gtin": card["gtin"],
+                        "message": "Группа карточки НК отличается от ожидаемой",
+                    }
+                )
             for field in ("tnved", "okpd2"):
                 if product[field] and card.get(field) and product[field] not in card[field]:
-                    issues.append({"code": "nk_" + field + "_mismatch", "gtin": card["gtin"],
-                                   "message": "Поле " + field + " отличается в Нацкаталоге"})
-        result = {"state": "matched" if not issues else "needs_review",
-                  "checked_on": date.today().isoformat(), "classification": classification,
-                  "observed": observed, "issues": issues, "suggested_group": expected,
-                  "automatic_changes": False}
+                    issues.append(
+                        {
+                            "code": "nk_" + field + "_mismatch",
+                            "gtin": card["gtin"],
+                            "message": "Поле " + field + " отличается в Нацкаталоге",
+                        }
+                    )
+        result = {
+            "state": "matched" if not issues else "needs_review",
+            "checked_on": date.today().isoformat(),
+            "classification": classification,
+            "observed": observed,
+            "issues": issues,
+            "suggested_group": expected,
+            "automatic_changes": False,
+        }
         check_id = str(uuid4())
         with self.db.connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             current = require_product(conn, seller, product_id)
             config = require_connection(conn, seller, connection_id)["config"]
-            if (current["revision"] != product["revision"] or
-                    digest(self.rules(seller)) != digest(rules) or
-                    digest(config) != observed["connection_digest"]):
+            if (
+                current["revision"] != product["revision"]
+                or digest(self.rules(seller)) != digest(rules)
+                or digest(config) != observed["connection_digest"]
+            ):
                 raise Conflict("Данные изменились во время сверки. Повторите чтение")
             conn.execute(
                 "INSERT INTO catalog_checks(id,seller_id,product_id,connection_id,"
                 "product_revision,rules_digest,value_json) VALUES(?,?,?,?,?,?,?)",
-                (check_id, seller, product_id, connection_id, product["revision"],
-                 digest(rules), encode(result)),
+                (
+                    check_id,
+                    seller,
+                    product_id,
+                    connection_id,
+                    product["revision"],
+                    digest(rules),
+                    encode(result),
+                ),
             )
-            self.event(conn, seller, product_id, "classification.checked",
-                       {"check_id": check_id, "state": result["state"]})
+            self.event(
+                conn,
+                seller,
+                product_id,
+                "classification.checked",
+                {"check_id": check_id, "state": result["state"]},
+            )
         return {"id": check_id, **result}
 
     def export_data(self, seller):
@@ -905,17 +1176,27 @@ class Catalog:
             conn.execute("BEGIN")
             require_seller(conn, seller)
             return {
-                "products": [decode(r) for r in conn.execute(
-                    "SELECT * FROM catalog_products WHERE seller_id=? ORDER BY sku,id", (seller,)
-                )],
+                "products": [
+                    decode(r)
+                    for r in conn.execute(
+                        "SELECT * FROM catalog_products WHERE seller_id=? ORDER BY sku,id",
+                        (seller,),
+                    )
+                ],
                 "documents": self.documents_in(conn, seller),
                 "batches": self.batches_in(conn, seller),
-                "links": [decode_record(r) for r in conn.execute(
-                    "SELECT * FROM catalog_links WHERE seller_id=? ORDER BY id", (seller,)
-                )],
-                "rules": [decode(r) for r in conn.execute(
-                    "SELECT * FROM catalog_rules WHERE seller_id=? ORDER BY id", (seller,)
-                )],
+                "links": [
+                    decode_record(r)
+                    for r in conn.execute(
+                        "SELECT * FROM catalog_links WHERE seller_id=? ORDER BY id", (seller,)
+                    )
+                ],
+                "rules": [
+                    decode(r)
+                    for r in conn.execute(
+                        "SELECT * FROM catalog_rules WHERE seller_id=? ORDER BY id", (seller,)
+                    )
+                ],
             }
 
     def prepare_import(self, seller, operations, errors, warnings, source_digest):
@@ -936,8 +1217,12 @@ class Catalog:
             ).fetchone()
             if not row:
                 raise NotFound("Предпросмотр импорта не найден")
-            return {"id": row["id"], "state": row["state"], "digest": row["digest"],
-                    **json.loads(row["plan_json"])}
+            return {
+                "id": row["id"],
+                "state": row["state"],
+                "digest": row["digest"],
+                **json.loads(row["plan_json"]),
+            }
 
     def run_import_operation(self, conn, seller, operation):
         kind, data = operation["kind"], operation["data"]
@@ -956,13 +1241,21 @@ class Catalog:
         if kind == "link":
             row = conn.execute(
                 "SELECT * FROM catalog_links WHERE seller_id=? AND source_product_id=? "
-                "AND variant=?", (seller, data["source_product_id"], data["variant"]),
+                "AND variant=?",
+                (seller, data["source_product_id"], data["variant"]),
             ).fetchone()
-            if ("before_link" in operation and
-                    operation["before_link"] != (decode_record(row) if row else None)):
+            if "before_link" in operation and operation["before_link"] != (
+                decode_record(row) if row else None
+            ):
                 raise Conflict("Связь изменилась после предпросмотра")
-            return self.link_in(conn, seller, data["product_id"], data["source_product_id"],
-                                data["variant"], data.get("overrides"))
+            return self.link_in(
+                conn,
+                seller,
+                data["product_id"],
+                data["source_product_id"],
+                data["variant"],
+                data.get("overrides"),
+            )
         raise InvalidInput("Неизвестное действие импорта")
 
     def validate_import_operations(self, seller, operations):
@@ -979,9 +1272,16 @@ class Catalog:
                     except (InvalidInput, Conflict, NotFound, sqlite3.IntegrityError) as exc:
                         conn.execute("ROLLBACK TO row_preview")
                         conn.execute("RELEASE row_preview")
-                        errors.append({"sheet": operation["sheet"], "row": operation["row"],
-                                       "column": None, "message": str(exc) if not isinstance(
-                                           exc, sqlite3.IntegrityError) else "Конфликт GTIN/артикула"})
+                        errors.append(
+                            {
+                                "sheet": operation["sheet"],
+                                "row": operation["row"],
+                                "column": None,
+                                "message": str(exc)
+                                if not isinstance(exc, sqlite3.IntegrityError)
+                                else "Конфликт GTIN/артикула",
+                            }
+                        )
             finally:
                 conn.execute("ROLLBACK TO preview")
                 conn.execute("RELEASE preview")
@@ -1019,11 +1319,13 @@ class Catalog:
         with self.db.connection() as conn:
             changed = conn.execute(
                 "UPDATE catalog_imports SET state='cancelled' "
-                "WHERE seller_id=? AND id=? AND state='prepared'", (seller, import_id),
+                "WHERE seller_id=? AND id=? AND state='prepared'",
+                (seller, import_id),
             )
             if not changed.rowcount:
                 raise Conflict("Импорт обработан или не найден")
         return {"state": "cancelled"}
+
 
 def decode_upload(value, maximum=16 * 1024 * 1024):
     if not isinstance(value, str) or len(value) > maximum * 4 // 3 + 8:
