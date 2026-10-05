@@ -42,11 +42,11 @@
     const r = await fetch(base + path, { method, headers: { "Content-Type": "application/json", "X-FBE-Flow": "1" }, body: body === undefined ? undefined : JSON.stringify(body) });
     const data = await r.json(); if (!r.ok) throw new Error(errorMessage(data)); return data;
   }
-  function notify(text) { feedback.textContent = text; feedback.hidden = false; }
+  function notify(text) { feedback.textContent = text; feedback.classList.add("catalog-success"); feedback.hidden = false; }
   function fail(error) {
     const dialogs = Array.from(document.querySelectorAll("dialog[open]"));
     const panel = dialogs.at(-1)?.querySelector(".catalog-dialog-error");
-    if (panel) { panel.textContent = error.message; panel.hidden = false; } else showError(error);
+    if (panel) { panel.textContent = error.message; panel.hidden = false; } else { feedback.classList.remove("catalog-success"); showError(error); }
   }
   async function run(button, fn) {
     const wasDisabled = button?.disabled;

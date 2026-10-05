@@ -96,3 +96,5 @@ dialog[id^="commerce-"] form { max-width: none; }
 .catalog-dialog { max-height: 90vh; overflow-y: auto; }
 
 [hidden] { display: none !important; }
+
+.feedback.catalog-success { background: #e8f3ee; color: #245c45; }

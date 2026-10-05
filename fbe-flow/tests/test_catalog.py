@@ -465,6 +465,20 @@ def test_local_printing_and_application_do_not_change_chz_status(workspace):
     assert codes[0]["external_status"] == "EMITTED"
     assert {e["kind"] for e in codes[0]["local_events"]} == {"code.assigned", "printed", "applied"}
     assert len(provider.calls) == calls
+    snapshot = state.catalog.export_data(seller)["marking_statuses"]
+    assert len(snapshot) == 1
+    assert snapshot[0]["batch_id"] == b["id"] and snapshot[0]["code_id"] == code_id
+    assert snapshot[0]["external_status"] == "EMITTED"
+    local_events = {e["kind"]: e for e in snapshot[0]["operator_events"]}
+    assert local_events["applied"]["actor"] == "Оператор"
+    content = catalog_xlsx.export(state.catalog, seller, product_ids=[p["id"]])
+    book = load_workbook(io.BytesIO(content))
+    status_sheet = book["Статусы маркировки"]
+    assert status_sheet.max_row == 3
+    assert status_sheet["C3"].value == gtin()
+    assert status_sheet["D3"].value == "EMITTED"
+    unchanged = preview(assortment, content)
+    assert unchanged["errors"] == [] and unchanged["operations"] == []
     with pytest.raises(Conflict):
         state.catalog.assign_codes(seller, b["id"], [code_id])
     with pytest.raises(Conflict):

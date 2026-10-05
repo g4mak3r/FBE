@@ -111,7 +111,9 @@ async function main() {
     await page.locator('[data-close="catalog-product-dialog"]').click();
     const dl = page.waitForEvent("download");
     await page.locator("#catalog-export-all").click();
-    const sourceFile = await (await dl).path(), changedFile = path.join(temporary, "changed.xlsx");
+    const downloaded = await dl, sourceFile = path.join(temporary, "export.xlsx"), changedFile = path.join(temporary, "changed.xlsx");
+    assert.ok(downloaded.suggestedFilename().endsWith(".xlsx"));
+    await downloaded.saveAs(sourceFile);
     const changed = spawnSync(process.env.FBE_QA_PYTHON || "python", ["qa/edit_catalog_book.py", sourceFile, changedFile, created.id], { cwd: path.resolve(__dirname, ".."), encoding: "utf8" });
     assert.equal(changed.status, 0, changed.stderr);
     await page.locator('[data-catalog-tab="exchange"]').click();

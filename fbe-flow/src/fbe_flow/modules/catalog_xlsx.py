@@ -418,13 +418,22 @@ def export(catalog, seller, empty=False, product_ids=None):
         sheet_table(book, name, keys, rows[name], empty)
     source_index = {v["source_product_id"]: v for v in data.get("source_details", [])}
     sheet_table(
-        book, "Карточки площадок",
-        ["product_id", "source_product_id", "adapter_key", "connection_name",
-         "external_id", "variant", "source_title"],
+        book,
+        "Карточки площадок",
+        [
+            "product_id",
+            "source_product_id",
+            "adapter_key",
+            "connection_name",
+            "external_id",
+            "variant",
+            "source_title",
+        ],
         [{**link, **source_index.get(link["source_product_id"], {})} for link in data["links"]],
     )
     sheet_table(
-        book, "Файлы документов",
+        book,
+        "Файлы документов",
         ["id", "document_id", "filename", "mime", "size", "digest"],
         [file for document in data["documents"] for file in document["files"]],
     )
@@ -453,8 +462,13 @@ def inspect(content):
     try:
         native, sheets = "_FBE" in book.sheetnames, []
         for sheet in book:
-            if sheet.title in {"_FBE", "Как заполнить", "Статусы маркировки",
-                               "Карточки площадок", "Файлы документов"}:
+            if sheet.title in {
+                "_FBE",
+                "Как заполнить",
+                "Статусы маркировки",
+                "Карточки площадок",
+                "Файлы документов",
+            }:
                 continue
             header_row, score, headers = 1, -1, []
             for row_number, row in enumerate(

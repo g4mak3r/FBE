@@ -562,19 +562,39 @@ class Catalog:
         conn.execute(
             "INSERT INTO catalog_document_events(id,seller_id,document_id,revision,data_json)"
             " VALUES(?,?,?,?,?)",
-            (snapshot_id, seller, document_id, document_revision,
-             encode({"before": {k: before[k] for k in CatalogDocument.model_fields}
-                     if before else None, "after": data})),
+            (
+                snapshot_id,
+                seller,
+                document_id,
+                document_revision,
+                encode(
+                    {
+                        "before": {k: before[k] for k in CatalogDocument.model_fields}
+                        if before
+                        else None,
+                        "after": data,
+                    }
+                ),
+            ),
         )
         new_products = set(data["product_ids"])
         previous_products = set(before["product_ids"]) if before else set()
         for product in new_products | previous_products:
             self.event(
-                conn, seller, product, "document.saved",
-                {"document_id": document_id, "snapshot_id": snapshot_id,
-                 "revision": document_revision, "number": data["number"],
-                 "kind": data["kind"], "status": data["status"],
-                 "linked": product in new_products, "was_linked": product in previous_products},
+                conn,
+                seller,
+                product,
+                "document.saved",
+                {
+                    "document_id": document_id,
+                    "snapshot_id": snapshot_id,
+                    "revision": document_revision,
+                    "number": data["number"],
+                    "kind": data["kind"],
+                    "status": data["status"],
+                    "linked": product in new_products,
+                    "was_linked": product in previous_products,
+                },
             )
         return decode(
             conn.execute(
@@ -1199,20 +1219,28 @@ class Catalog:
                 "SELECT e.batch_id,e.code_id,e.kind,e.created_at,e.data_json "
                 "FROM catalog_events e JOIN catalog_units u ON u.seller_id=e.seller_id "
                 "AND u.batch_id=e.batch_id AND u.code_id=e.code_id WHERE e.seller_id=? "
-                "ORDER BY e.created_at,e.id", (seller,)
+                "ORDER BY e.created_at,e.id",
+                (seller,),
             ):
                 detail = json.loads(row["data_json"])
                 code_events.setdefault((row["batch_id"], row["code_id"]), []).append(
-                    {"kind": row["kind"], "created_at": row["created_at"],
-                     "actor": detail.get("actor"), "note": detail.get("note")}
+                    {
+                        "kind": row["kind"],
+                        "created_at": row["created_at"],
+                        "actor": detail.get("actor"),
+                        "note": detail.get("note"),
+                    }
                 )
             statuses = [
-                {**dict(row), "operator_events": code_events.get(
-                    (row["batch_id"], row["code_id"]), [])}
+                {
+                    **dict(row),
+                    "operator_events": code_events.get((row["batch_id"], row["code_id"]), []),
+                }
                 for row in conn.execute(
                     "SELECT u.batch_id,c.id AS code_id,c.gtin,c.external_status "
                     "FROM catalog_units u JOIN marking_codes c ON c.seller_id=u.seller_id "
-                    "AND c.id=u.code_id WHERE u.seller_id=? ORDER BY u.batch_id,c.id", (seller,)
+                    "AND c.id=u.code_id WHERE u.seller_id=? ORDER BY u.batch_id,c.id",
+                    (seller,),
                 )
             ]
             return {
@@ -1246,7 +1274,8 @@ class Catalog:
                         "FROM catalog_links l JOIN products p ON p.seller_id=l.seller_id "
                         "AND p.id=l.source_product_id JOIN connections c "
                         "ON c.seller_id=p.seller_id AND c.id=p.connection_id "
-                        "WHERE l.seller_id=?", (seller,)
+                        "WHERE l.seller_id=?",
+                        (seller,),
                     )
                 ],
             }

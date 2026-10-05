@@ -6,6 +6,7 @@ const sellerApi = `/api/sellers/${encodeURIComponent(sellerId)}`;
 const feedback = document.getElementById("feedback");
 
 function showError(error) {
+  feedback.classList.remove("catalog-success");
   feedback.textContent = error.message;
   feedback.hidden = false;
 }
