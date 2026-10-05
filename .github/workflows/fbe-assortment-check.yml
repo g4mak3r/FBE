@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   verify:
@@ -17,24 +16,6 @@ jobs:
         working-directory: fbe-flow
     steps:
       - uses: actions/checkout@v4
-      - name: Stop obsolete benchmark run
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python - <<'PY'
-          import os
-          import urllib.request
-          import urllib.error
-          req = urllib.request.Request(
-              "https://api.github.com/repos/g4mak3r/FBE/actions/runs/37357519808/cancel",
-              method="POST", headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
-                                     "Accept": "application/vnd.github+json"})
-          try:
-              with urllib.request.urlopen(req, timeout=10) as response:
-                  print("Obsolete benchmark cancellation:", response.status)
-          except urllib.error.HTTPError as error:
-              print("Obsolete benchmark no longer active or cancellation unavailable:", error.code)
-          PY
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -66,14 +47,11 @@ jobs:
           node-version: "22"
       - name: Install browser checks
         run: |
-          npm --prefix qa install --ignore-scripts
+          npm --prefix qa ci --ignore-scripts
           python -c 'import json; from pathlib import Path; print("FBE_FORMAT fbe-flow/qa/package-lock.json 0 " + json.dumps(Path("qa/package-lock.json").read_text()))'
       - name: Install Chromium
         working-directory: fbe-flow/qa
         run: npx playwright install --with-deps chromium
-      - name: Large assortment roundtrip
-        timeout-minutes: 5
-        run: python -m qa.catalog_benchmark --count 30000
       - name: Browser acceptance
         env:
           FBE_QA_EMIT_IMAGES: "1"

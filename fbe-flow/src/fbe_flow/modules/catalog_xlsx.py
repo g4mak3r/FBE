@@ -428,23 +428,8 @@ def export(catalog, seller, empty=False, product_ids=None):
         ["id", "document_id", "filename", "mime", "size", "digest"],
         [file for document in data["documents"] for file in document["files"]],
     )
-    statuses = []
-    if not empty:
-        for batch in data["batches"]:
-            for offset in range(0, batch["assigned"], 200):
-                for code in catalog.batch_codes(seller, batch["id"], offset, 200)["items"]:
-                    statuses.append(
-                        {
-                            "batch_id": batch["id"],
-                            "code_id": code["id"],
-                            "gtin": code["gtin"],
-                            "external_status": code["external_status"],
-                            "operator_events": [
-                                {"kind": e["kind"], "created_at": e["created_at"]}
-                                for e in code["local_events"]
-                            ],
-                        }
-                    )
+    batch_ids = {v["id"] for v in data["batches"]}
+    statuses = [v for v in data.get("marking_statuses", []) if v["batch_id"] in batch_ids]
     sheet_table(
         book,
         "Статусы маркировки",

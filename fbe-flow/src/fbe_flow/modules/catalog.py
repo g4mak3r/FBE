@@ -1194,7 +1194,29 @@ class Catalog:
         with self.db.connection() as conn:
             conn.execute("BEGIN")
             require_seller(conn, seller)
+            code_events = {}
+            for row in conn.execute(
+                "SELECT e.batch_id,e.code_id,e.kind,e.created_at,e.data_json "
+                "FROM catalog_events e JOIN catalog_units u ON u.seller_id=e.seller_id "
+                "AND u.batch_id=e.batch_id AND u.code_id=e.code_id WHERE e.seller_id=? "
+                "ORDER BY e.created_at,e.id", (seller,)
+            ):
+                detail = json.loads(row["data_json"])
+                code_events.setdefault((row["batch_id"], row["code_id"]), []).append(
+                    {"kind": row["kind"], "created_at": row["created_at"],
+                     "actor": detail.get("actor"), "note": detail.get("note")}
+                )
+            statuses = [
+                {**dict(row), "operator_events": code_events.get(
+                    (row["batch_id"], row["code_id"]), [])}
+                for row in conn.execute(
+                    "SELECT u.batch_id,c.id AS code_id,c.gtin,c.external_status "
+                    "FROM catalog_units u JOIN marking_codes c ON c.seller_id=u.seller_id "
+                    "AND c.id=u.code_id WHERE u.seller_id=? ORDER BY u.batch_id,c.id", (seller,)
+                )
+            ]
             return {
+                "marking_statuses": statuses,
                 "products": [
                     decode(r)
                     for r in conn.execute(

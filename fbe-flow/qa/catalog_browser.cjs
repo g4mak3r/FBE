@@ -10,7 +10,7 @@ async function main() {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fbe-catalog-browser-"));
   const metadata = path.join(temporary, "metadata.json");
   const server = spawn(process.env.FBE_QA_PYTHON || "python", ["-m", "qa.catalog_server", metadata], { cwd: path.resolve(__dirname, ".."), stdio: ["ignore", "pipe", "pipe"] });
-  let serverLog = "", browser;
+  let serverLog = "", browser, page; const errors = [];
   server.stdout.on("data", (d) => { serverLog += d.toString(); });
   server.stderr.on("data", (d) => { serverLog += d.toString(); });
   try {
@@ -24,7 +24,7 @@ async function main() {
     const root = "http://127.0.0.1:8767", api = root + "/api/sellers/" + meta.seller + "/catalog";
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ viewport: { width: 1365, height: 900 }, acceptDownloads: true, extraHTTPHeaders: { "X-FBE-Flow": "1" } });
-    const page = await context.newPage(), errors = [];
+    page = await context.newPage();
     page.on("pageerror", (e) => errors.push(e.message));
     async function json(url) { const r = await context.request.get(url); assert.equal(r.status(), 200, await r.text()); return r.json(); }
     async function checkLayout() { const size = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth })); assert.ok(size.scroll <= size.width + 1, "Horizontal page overflow: " + JSON.stringify(size)); }
@@ -78,7 +78,8 @@ async function main() {
     await page.locator('#catalog-code-event-form [name="kind"]').selectOption("applied");
     await page.locator('#catalog-code-event-form [name="actor"]').fill("Оператор QA");
     await page.locator("#catalog-code-submit").click();
-    await page.locator("#catalog-codes").getByText(/Нанесена/).waitFor();
+    await page.locator("#catalog-codes").getByText(/Маркировка нанесена/).waitFor();
+    await page.waitForFunction(() => document.getElementById("feedback").textContent === "Событие оператора записано");
     assert.ok((await page.locator("#catalog-codes").textContent()).includes("EMITTED"));
     await page.locator('[data-close="catalog-codes-dialog"]').click();
     await checkLayout(); await screenshot("catalog-desktop-dialog");
@@ -120,7 +121,7 @@ async function main() {
     await page.locator("#catalog-preview").click();
     await page.waitForFunction(() => document.getElementById("catalog-import-summary").textContent.includes("изменений: 1"));
     await page.locator("#catalog-apply").click();
-    await page.waitForFunction(() => document.getElementById("catalog-import-summary").textContent.includes("applied"));
+    await page.waitForFunction(() => document.getElementById("catalog-import-summary").textContent.includes("Применён"));
     assert.equal(await page.locator("#catalog-apply").isDisabled(), true);
     assert.equal((await json(api + "/products/" + created.id)).brand, "Из XLSX");
     await checkLayout(); await screenshot("catalog-desktop-import");
@@ -152,6 +153,16 @@ async function main() {
     assert.equal(await page.getByText("QA-003", { exact: true }).count(), 0);
     assert.deepEqual(errors, []);
     console.log("Browser acceptance passed: product, typed attributes, documents/files, batch application, rules/ChZ, schema dictionary, XLSX atomic import, WB variants, Ozon details, desktop/mobile and seller isolation.");
+  } catch (error) {
+    if (page) {
+      try {
+        const output = path.join(__dirname, "artifacts"); fs.mkdirSync(output, { recursive: true });
+        const content = await page.screenshot({ path: path.join(output, "catalog-failure.jpg"), type: "jpeg", quality: 45 });
+        if (process.env.FBE_QA_EMIT_IMAGES === "1") { const raw = content.toString("base64"); for (let i = 0; i < raw.length; i += 4000) console.log("FBE_SCREENSHOT catalog-failure " + i + " " + raw.slice(i, i + 4000)); }
+        console.error("Browser diagnostics:", JSON.stringify({ errors, ui: await page.locator("#feedback, dialog[open] .catalog-dialog-error:not([hidden])").allTextContents() }));
+      } catch (captureError) { console.error("Failure capture:", captureError.message); }
+    }
+    throw error;
   } finally {
     if (browser) await browser.close();
     server.kill("SIGTERM");

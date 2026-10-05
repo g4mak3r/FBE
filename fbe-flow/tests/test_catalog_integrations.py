@@ -247,7 +247,14 @@ class SchemaTransport:
 def schema_adapter(channel, monkeypatch):
     vault, transport = MemoryVault(), SchemaTransport()
     seller = str(uuid4())
-    ref = vault.put(seller, {channel + "_token": token(mask=18 | (1 << 30), sid="100") if channel == "wb" else "fixture"})
+    ref = vault.put(
+        seller,
+        {
+            channel + "_token": token(mask=18 | (1 << 30), sid="100")
+            if channel == "wb"
+            else "fixture"
+        },
+    )
     adapter = (WbAdapter if channel == "wb" else OzonAdapter)(
         vault, transport, pause=lambda _: None
     )
@@ -316,6 +323,7 @@ def test_ozon_full_attribute_refresh_preserves_variant_and_canonical_trade_item(
 def test_existing_wb_and_ozon_workflows_enforce_active_canonical_binding(tmp_path):
     from fbe_flow.core.errors import Conflict
     from fbe_flow.modules.catalog import clean_product
+
     from .commerce_fixtures import application, seed_all
 
     app, chz, wb_api, _, _, _ = application(tmp_path)
@@ -324,28 +332,65 @@ def test_existing_wb_and_ozon_workflows_enforce_active_canonical_binding(tmp_pat
     with TestClient(app, base_url="http://localhost", headers={"X-FBE-Flow": "1"}) as client:
         seller, chz_connection, wb, ozon, _ = seed_all(app.state, client, chz, wb_api)
         state = app.state
-        wb_product = next(p for p in state.fulfillment.records(seller, wb["id"], "products")["items"]
-                          if p["external_id"] == "1")
-        nk = next(p for p in state.marking.products(seller, chz_connection["id"])["items"]
-                  if p["external_id"] == "1")
-        canonical = state.catalog.adopt(seller, data(product_group=chz.group), wb_product["id"], "11")
-        state.fulfillment.link(seller, wb["id"], {"product_id": wb_product["id"], "chrt_id": "11",
-                              "chz_connection_id": chz_connection["id"], "chz_product_id": nk["id"],
-                              "gtin": gtin(), "product_group": chz.group})
-        wb_order = next(p for p in state.fulfillment.records(seller, wb["id"], "orders")["items"]
-                        if p["external_id"] == "1001")
+        wb_product = next(
+            p
+            for p in state.fulfillment.records(seller, wb["id"], "products")["items"]
+            if p["external_id"] == "1"
+        )
+        nk = next(
+            p
+            for p in state.marking.products(seller, chz_connection["id"])["items"]
+            if p["external_id"] == "1"
+        )
+        canonical = state.catalog.adopt(
+            seller, data(product_group=chz.group), wb_product["id"], "11"
+        )
+        state.fulfillment.link(
+            seller,
+            wb["id"],
+            {
+                "product_id": wb_product["id"],
+                "chrt_id": "11",
+                "chz_connection_id": chz_connection["id"],
+                "chz_product_id": nk["id"],
+                "gtin": gtin(),
+                "product_group": chz.group,
+            },
+        )
+        wb_order = next(
+            p
+            for p in state.fulfillment.records(seller, wb["id"], "orders")["items"]
+            if p["external_id"] == "1001"
+        )
         assert state.fulfillment.order_link(seller, wb["id"], wb_order["id"])[1]["gtin"] == gtin()
-        ozon_product = next(p for p in state.commerce.records(seller, ozon["id"], "products",
-                                                             limit=200)["items"]
-                            if p["external_id"] == "1")
+        ozon_product = next(
+            p
+            for p in state.commerce.records(seller, ozon["id"], "products", limit=200)["items"]
+            if p["external_id"] == "1"
+        )
         state.catalog.link(seller, canonical["id"], ozon_product["id"], "10001")
-        state.commerce.link(seller, ozon["id"], {"product_id": ozon_product["id"],
-                            "chz_connection_id": chz_connection["id"], "chz_product_id": nk["id"],
-                            "gtin": gtin(), "product_group": chz.group})
+        state.commerce.link(
+            seller,
+            ozon["id"],
+            {
+                "product_id": ozon_product["id"],
+                "chz_connection_id": chz_connection["id"],
+                "chz_product_id": nk["id"],
+                "gtin": gtin(),
+                "product_group": chz.group,
+            },
+        )
         ozon_order = state.commerce.records(seller, ozon["id"], "orders")["items"][0]
-        assert state.commerce.order_item(seller, ozon["id"], ozon_order["id"], "10001")[2]["gtin"] == gtin()
-        state.catalog.save_product(seller, {**clean_product(canonical), "archived": True},
-                                   canonical["id"], canonical["revision"])
+        assert (
+            state.commerce.order_item(seller, ozon["id"], ozon_order["id"], "10001")[2]["gtin"]
+            == gtin()
+        )
+        state.catalog.save_product(
+            seller,
+            {**clean_product(canonical), "archived": True},
+            canonical["id"],
+            canonical["revision"],
+        )
         before = len(chz.calls)
         with pytest.raises(Conflict):
             state.fulfillment.order_link(seller, wb["id"], wb_order["id"])

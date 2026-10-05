@@ -492,8 +492,14 @@ def test_external_sheet_with_empty_first_column_and_blank_helper_sheet(assortmen
     content = book_bytes(book)
     found = catalog_xlsx.inspect(content)
     first = found["sheets"][0]
-    plan = preview(assortment, content, profile="custom", sheet_name=first["name"],
-                   header_row=first["header_row"], mapping=first["mapping"])
+    plan = preview(
+        assortment,
+        content,
+        profile="custom",
+        sheet_name=first["name"],
+        header_row=first["header_row"],
+        mapping=first["mapping"],
+    )
     assert not plan["errors"] and plan["operations"][0]["row"] == 2
     apply(assortment, plan)
 
@@ -504,8 +510,10 @@ def test_corrupted_native_metadata_reports_validation_error(assortment):
     book = load_workbook(io.BytesIO(content))
     book["_FBE"]["C1"] = "extra"
     content = book_bytes(book)
-    response = client.post(f"/api/sellers/{seller}/catalog/xlsx/preview",
-                           json={"filename": "bad.xlsx", "content": base64.b64encode(content).decode()})
+    response = client.post(
+        f"/api/sellers/{seller}/catalog/xlsx/preview",
+        json={"filename": "bad.xlsx", "content": base64.b64encode(content).decode()},
+    )
     assert response.status_code == 422
     assert state.catalog.list(seller)["total"] == 0
 
@@ -516,8 +524,14 @@ def test_certificate_column_preserves_document_type(assortment):
     book.active.append(["CERT-001", "Товар", "Сертификат 001"])
     content = book_bytes(book)
     found = catalog_xlsx.inspect(content)["sheets"][0]
-    plan = preview(assortment, content, profile="wb", sheet_name=found["name"],
-                   header_row=found["header_row"], mapping=found["mapping"])
+    plan = preview(
+        assortment,
+        content,
+        profile="wb",
+        sheet_name=found["name"],
+        header_row=found["header_row"],
+        mapping=found["mapping"],
+    )
     assert not plan["errors"]
     apply(assortment, plan)
     assert assortment[0].catalog.documents(assortment[2])[0]["kind"] == "certificate"
@@ -526,22 +540,50 @@ def test_certificate_column_preserves_document_type(assortment):
 def test_shared_document_audit_stores_one_snapshot_and_compact_product_events(assortment):
     state, _, seller, other = assortment
     products = [create(assortment, n) for n in range(1, 31)]
-    document = state.catalog.save_document(seller, {"kind": "declaration", "number": "Общий ДоС",
-                         "product_ids": [p["id"] for p in products], "scope": "Общая область"})
+    document = state.catalog.save_document(
+        seller,
+        {
+            "kind": "declaration",
+            "number": "Общий ДоС",
+            "product_ids": [p["id"] for p in products],
+            "scope": "Общая область",
+        },
+    )
     with state.database.connection() as conn:
-        snapshots = conn.execute("SELECT id,length(data_json) FROM catalog_document_events").fetchall()
-        sizes = [r[0] for r in conn.execute("SELECT length(data_json) FROM catalog_events "
-                                           "WHERE kind='document.saved'")]
+        snapshots = conn.execute(
+            "SELECT id,length(data_json) FROM catalog_document_events"
+        ).fetchall()
+        sizes = [
+            r[0]
+            for r in conn.execute(
+                "SELECT length(data_json) FROM catalog_events WHERE kind='document.saved'"
+            )
+        ]
     assert len(snapshots) == 1 and len(sizes) == 30
     assert max(sizes) < 500
     full = state.catalog.document_event(seller, snapshots[0][0])
     assert full["data"]["after"]["product_ids"] == [p["id"] for p in products]
     with pytest.raises(NotFound):
         state.catalog.document_event(other, snapshots[0][0])
-    body = {k: document[k] for k in ("kind", "number", "issued_on", "expires_on", "issuer",
-                                    "scope", "status", "verification_note", "product_ids")}
+    body = {
+        k: document[k]
+        for k in (
+            "kind",
+            "number",
+            "issued_on",
+            "expires_on",
+            "issuer",
+            "scope",
+            "status",
+            "verification_note",
+            "product_ids",
+        )
+    }
     body["product_ids"] = body["product_ids"][1:]
     state.catalog.save_document(seller, body, document["id"], document["revision"])
-    event = next(e for e in state.catalog.detail(seller, products[0]["id"])["events"]
-                 if e["kind"] == "document.saved" and e["data"]["revision"] == 2)
+    event = next(
+        e
+        for e in state.catalog.detail(seller, products[0]["id"])["events"]
+        if e["kind"] == "document.saved" and e["data"]["revision"] == 2
+    )
     assert event["data"]["linked"] is False and event["data"]["was_linked"] is True

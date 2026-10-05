@@ -103,3 +103,6 @@ CREATE TABLE catalog_document_events (
  UNIQUE(seller_id,document_id,revision),
  FOREIGN KEY(seller_id,document_id) REFERENCES catalog_documents(seller_id,id)
 );
+
+CREATE INDEX catalog_events_batch_code
+ON catalog_events(seller_id,batch_id,code_id,created_at);

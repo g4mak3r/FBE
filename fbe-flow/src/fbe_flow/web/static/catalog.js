@@ -2,6 +2,13 @@
 (() => {
   if (!document.getElementById("catalog-root")) return;
   const base = sellerApi + "/catalog", $ = (id) => document.getElementById(id);
+  const eventLabels = {
+    "product.saved": "Товар сохранён", "document.saved": "Документ изменён",
+    "batch.saved": "Партия сохранена", "code.assigned": "Код назначен экземпляру",
+    printed: "Этикетка напечатана", applied: "Маркировка нанесена",
+    quality_checked: "Качество проверено", "classification.checked": "Сверка с ЧЗ выполнена",
+    "source.linked": "Карточка источника связана", "source.unlinked": "Связь источника удалена"
+  };
   const labels = {
     title: "Наименование", sku: "Артикул FBE", family: "Семейство / модель", brand: "Бренд",
     manufacturer: "Производитель", country: "Страна производства", description: "Описание",
@@ -213,7 +220,7 @@
     if (!current.batches.length) batches.append(node("p", "Партий пока нет", "muted"));
     renderCheck(current.check?.value, current.check?.stale);
     const history = $("catalog-history"); history.replaceChildren(); for (const e of current.events) {
-      const detail = jsonDetails(history, e.created_at + " · " + e.kind, e.data);
+      const detail = jsonDetails(history, e.created_at + " · " + (eventLabels[e.kind] || e.kind), e.data);
       if (e.data.snapshot_id) {
         const load = button("Прочитать изменение документа", async () => {
           jsonDetails(detail, "Полные сведения документа", await request("/document-events/" + e.data.snapshot_id));
@@ -280,7 +287,7 @@
     for (const c of codePage.items) {
       const checkbox = node("input"); checkbox.type = "checkbox"; checkbox.checked = selectedCodes.has(c.id); checkbox.setAttribute("aria-label", "Выбрать код " + c.code);
       checkbox.addEventListener("change", () => { if (checkbox.checked) selectedCodes.add(c.id); else selectedCodes.delete(c.id); codeSelection(); });
-      const events = (c.local_events || []).map((e) => ({ printed: "Напечатана", applied: "Нанесена", quality_checked: "Проверена" }[e.kind] || e.kind) + " · " + (e.data?.actor || "")).join("\n");
+      const events = (c.local_events || []).map((e) => (eventLabels[e.kind] || e.kind) + " · " + (e.data?.actor || "")).join("\n");
       parent.append(tr([checkbox, c.code, c.external_status || "Не прочитан", events || "—"]));
     }
     if (!codePage.items.length) parent.append(tr(["", "Кодов пока нет", "", ""]));
@@ -345,7 +352,8 @@
   }
   on("catalog-schema-form", async () => { const f = $("catalog-schema-form"); await request("/schemas/refresh", "POST", { connection_id: f.connection_id.value, category: f.category.value.trim() }); await loadRules(); }, "submit");
   async function loadDictionary() {
-    const result = await request("/schemas/dictionary", "POST", dictionaryTarget), parent = $("catalog-dictionary-values");
+    const { connection_id, category, attribute_id, cursor } = dictionaryTarget;
+    const result = await request("/schemas/dictionary", "POST", { connection_id, category, attribute_id, cursor }), parent = $("catalog-dictionary-values");
     for (const value of result.items || result.values || result.result || []) parent.append(node("p", String(value.id ?? value.value_id ?? "") + " · " + (value.value ?? value.name ?? "")));
     dictionaryTarget.cursor = result.cursor ?? result.next_cursor ?? (result.result?.at(-1)?.id || 0); dictionaryTarget.has_next = Boolean(result.has_next);
     $("catalog-dictionary-next").disabled = !dictionaryTarget.has_next;
@@ -391,7 +399,7 @@
   on("catalog-sheet", () => buildMapping(), "change"); on("catalog-profile", () => buildMapping(), "change");
   function renderImport() {
     const plan = importPlan; $("catalog-import-preview").hidden = false;
-    $("catalog-import-summary").textContent = "Состояние: " + plan.state + " · изменений: " + plan.operations.length + " · ошибок: " + plan.errors.length + " · предупреждений: " + plan.warnings.length;
+    $("catalog-import-summary").textContent = "Состояние: " + ({ prepared: "Готов к применению", applied: "Применён", cancelled: "Отменён" }[plan.state] || plan.state) + " · изменений: " + plan.operations.length + " · ошибок: " + plan.errors.length + " · предупреждений: " + plan.warnings.length;
     const parent = $("catalog-import-messages"); parent.replaceChildren();
     for (const v of [...plan.errors, ...plan.warnings].slice(0, 100)) parent.append(node("p", (v.sheet || "") + (v.row ? " · строка " + v.row : "") + (v.column ? " · колонка " + v.column : "") + ": " + v.message));
     if (plan.errors.length + plan.warnings.length > 100) parent.append(node("p", "Показаны первые 100 сообщений. Полный отчёт доступен в JSON."));
