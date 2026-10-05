@@ -95,3 +95,11 @@ CREATE TABLE catalog_imports (
  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), applied_at TEXT,
  UNIQUE(seller_id,id)
 );
+
+CREATE TABLE catalog_document_events (
+ id TEXT PRIMARY KEY, seller_id TEXT NOT NULL, document_id TEXT NOT NULL,
+ revision INTEGER NOT NULL CHECK(revision>0), data_json TEXT NOT NULL CHECK(json_valid(data_json)),
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(seller_id,document_id,revision),
+ FOREIGN KEY(seller_id,document_id) REFERENCES catalog_documents(seller_id,id)
+);

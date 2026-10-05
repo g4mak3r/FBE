@@ -60,7 +60,7 @@
   function on(id, fn, type = "click") { $(id).addEventListener(type, (e) => { if (type === "submit") e.preventDefault(); run(type === "submit" ? e.currentTarget.querySelector('[type="submit"]') : e.currentTarget, () => fn(e)); }); }
   function button(text, fn) { const b = node("button", text, "secondary"); b.type = "button"; b.addEventListener("click", () => run(b, fn)); return b; }
   function open(id) { const d = $(id); const e = d.querySelector(".catalog-dialog-error"); if (e) e.hidden = true; if (!d.open) d.showModal(); }
-  function jsonDetails(parent, title, data) { const d = node("details"); d.append(node("summary", title), node("pre", JSON.stringify(data, null, 2))); parent.append(d); }
+  function jsonDetails(parent, title, data) { const d = node("details"); d.append(node("summary", title), node("pre", JSON.stringify(data, null, 2))); parent.append(d); return d; }
   function selectOptions(select, entries, placeholder) {
     const old = select.value; select.replaceChildren();
     if (placeholder !== undefined) { const o = node("option", placeholder); o.value = ""; select.append(o); }
@@ -183,6 +183,16 @@
     const parent = $("catalog-check-result"); parent.replaceChildren();
     if (!result) { parent.append(node("p", "Сверка ещё не выполнена", "muted")); return; }
     parent.append(node("p", (stale ? "Результат устарел. Повторите сверку. " : "") + ({ matched: "Соответствие подтверждено по проверенным данным", needs_review: "Нужна проверка расхождений", unknown: "Правило не найдено", incomplete: "Недостаточно данных", ambiguous: "Правила противоречат друг другу" }[result.state] || result.state)));
+    const group = result.suggested_group || result.product_group;
+    if (group) {
+      parent.append(node("p", "Предлагаемая группа ЧЗ: " + group));
+      if ($("catalog-product-form").elements.namedItem("product_group").value !== group)
+        parent.append(button("Вставить группу в форму товара", () => {
+          $("catalog-product-form").elements.namedItem("product_group").value = group;
+          notify("Группа вставлена в форму. Сохраните товар после проверки.");
+        }));
+    }
+    if (result.observed?.account_groups) parent.append(node("p", "Группы аккаунта: " + result.observed.account_groups.join(", ")));
     for (const issue of result.issues || []) parent.append(node("p", (issue.gtin ? issue.gtin + ": " : "") + issue.message));
     jsonDetails(parent, "Подробности проверки", result);
   }
@@ -202,7 +212,16 @@
     for (const b of current.batches) { const a = card(b.name, "Единиц: " + b.quantity + " · кодов назначено: " + b.assigned + " · нанесено локально: " + (b.applied || 0)); a.append(button("Изменить", () => editBatch(b)), button("Экземпляры и нанесение", () => openCodes(b))); batches.append(a); }
     if (!current.batches.length) batches.append(node("p", "Партий пока нет", "muted"));
     renderCheck(current.check?.value, current.check?.stale);
-    const history = $("catalog-history"); history.replaceChildren(); for (const e of current.events) jsonDetails(history, e.created_at + " · " + e.kind, e.data);
+    const history = $("catalog-history"); history.replaceChildren(); for (const e of current.events) {
+      const detail = jsonDetails(history, e.created_at + " · " + e.kind, e.data);
+      if (e.data.snapshot_id) {
+        const load = button("Прочитать изменение документа", async () => {
+          jsonDetails(detail, "Полные сведения документа", await request("/document-events/" + e.data.snapshot_id));
+          load.remove();
+        });
+        detail.append(load);
+      }
+    }
   }
   async function loadSources() {
     const form = $("catalog-source-search"), q = new URLSearchParams({ offset: sourceOffset, limit: 30, search: form.search.value, unlinked: form.unlinked.checked });

@@ -557,16 +557,24 @@ class Catalog:
             "INSERT INTO catalog_document_products(seller_id,document_id,product_id) VALUES(?,?,?)",
             [(seller, document_id, p) for p in data["product_ids"]],
         )
-        for product in set(data["product_ids"] + (before["product_ids"] if before else [])):
+        snapshot_id = str(uuid4())
+        document_revision = before["revision"] + 1 if before else 1
+        conn.execute(
+            "INSERT INTO catalog_document_events(id,seller_id,document_id,revision,data_json)"
+            " VALUES(?,?,?,?,?)",
+            (snapshot_id, seller, document_id, document_revision,
+             encode({"before": {k: before[k] for k in CatalogDocument.model_fields}
+                     if before else None, "after": data})),
+        )
+        new_products = set(data["product_ids"])
+        previous_products = set(before["product_ids"]) if before else set()
+        for product in new_products | previous_products:
             self.event(
-                conn,
-                seller,
-                product,
-                "document.saved",
-                {
-                    "document_id": document_id,
-                    "data": data,
-                },
+                conn, seller, product, "document.saved",
+                {"document_id": document_id, "snapshot_id": snapshot_id,
+                 "revision": document_revision, "number": data["number"],
+                 "kind": data["kind"], "status": data["status"],
+                 "linked": product in new_products, "was_linked": product in previous_products},
             )
         return decode(
             conn.execute(
@@ -578,6 +586,16 @@ class Catalog:
         with self.db.connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             return self.save_document_in(conn, seller, data, document_id, revision)
+
+    def document_event(self, seller, event_id):
+        with self.db.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM catalog_document_events WHERE seller_id=? AND id=?",
+                (seller, event_id),
+            ).fetchone()
+            if not row:
+                raise NotFound("Событие документа не найдено")
+            return decode_record(row)
 
     def add_file(self, seller, document_id, filename, content):
         if not 1 <= len(content) <= 10 * 1024 * 1024 or not 1 <= len(filename) <= 200:
@@ -1196,6 +1214,17 @@ class Catalog:
                     decode(r)
                     for r in conn.execute(
                         "SELECT * FROM catalog_rules WHERE seller_id=? ORDER BY id", (seller,)
+                    )
+                ],
+                "source_details": [
+                    dict(r)
+                    for r in conn.execute(
+                        "SELECT DISTINCT p.id AS source_product_id,p.title AS source_title,"
+                        "p.external_id,c.adapter_key,c.name AS connection_name "
+                        "FROM catalog_links l JOIN products p ON p.seller_id=l.seller_id "
+                        "AND p.id=l.source_product_id JOIN connections c "
+                        "ON c.seller_id=p.seller_id AND c.id=p.connection_id "
+                        "WHERE l.seller_id=?", (seller,)
                     )
                 ],
             }

@@ -399,3 +399,8 @@ def apply(request: Request, seller_id: str, import_id: str, body: ApplyInput):
 @router.post("/imports/{import_id}/cancel")
 def cancel(request: Request, seller_id: str, import_id: str):
     return request.app.state.catalog.cancel_import(seller_id, import_id)
+
+
+@router.get("/document-events/{event_id}")
+def document_event(request: Request, seller_id: str, event_id: str):
+    return request.app.state.catalog.document_event(seller_id, event_id)

@@ -390,7 +390,12 @@ def test_document_files_shared_applicability_scope_and_manual_verification(assor
     with pytest.raises(NotFound):
         state.catalog.file(other, attached["id"])
     assert client.get(f"/api/sellers/{other}/catalog/files/{attached['id']}").status_code == 404
-    plan = preview(assortment, catalog_xlsx.export(state.catalog, seller, product_ids=[p["id"]]))
+    exported = catalog_xlsx.export(state.catalog, seller, product_ids=[p["id"]])
+    workbook = load_workbook(io.BytesIO(exported))
+    metadata = workbook["Файлы документов"]
+    columns = {c.value: c.column for c in metadata[2]}
+    assert metadata.cell(3, columns["filename"]).value == "document.pdf"
+    plan = preview(assortment, exported)
     assert not plan["errors"] and plan["operations"] == []
     assert set(state.catalog.documents(seller)[0]["product_ids"]) == {p["id"], q["id"]}
 
@@ -516,3 +521,27 @@ def test_certificate_column_preserves_document_type(assortment):
     assert not plan["errors"]
     apply(assortment, plan)
     assert assortment[0].catalog.documents(assortment[2])[0]["kind"] == "certificate"
+
+
+def test_shared_document_audit_stores_one_snapshot_and_compact_product_events(assortment):
+    state, _, seller, other = assortment
+    products = [create(assortment, n) for n in range(1, 31)]
+    document = state.catalog.save_document(seller, {"kind": "declaration", "number": "Общий ДоС",
+                         "product_ids": [p["id"] for p in products], "scope": "Общая область"})
+    with state.database.connection() as conn:
+        snapshots = conn.execute("SELECT id,length(data_json) FROM catalog_document_events").fetchall()
+        sizes = [r[0] for r in conn.execute("SELECT length(data_json) FROM catalog_events "
+                                           "WHERE kind='document.saved'")]
+    assert len(snapshots) == 1 and len(sizes) == 30
+    assert max(sizes) < 500
+    full = state.catalog.document_event(seller, snapshots[0][0])
+    assert full["data"]["after"]["product_ids"] == [p["id"] for p in products]
+    with pytest.raises(NotFound):
+        state.catalog.document_event(other, snapshots[0][0])
+    body = {k: document[k] for k in ("kind", "number", "issued_on", "expires_on", "issuer",
+                                    "scope", "status", "verification_note", "product_ids")}
+    body["product_ids"] = body["product_ids"][1:]
+    state.catalog.save_document(seller, body, document["id"], document["revision"])
+    event = next(e for e in state.catalog.detail(seller, products[0]["id"])["events"]
+                 if e["kind"] == "document.saved" and e["data"]["revision"] == 2)
+    assert event["data"]["linked"] is False and event["data"]["was_linked"] is True

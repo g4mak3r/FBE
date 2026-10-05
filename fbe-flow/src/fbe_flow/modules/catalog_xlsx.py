@@ -88,6 +88,14 @@ LABELS = {
     "marking_required": "Маркировка обязательна",
     "document_number": "Номер ДоС / документа (из карточки)",
     "document_kind": "Тип документа (из карточки)",
+    "filename": "Имя файла",
+    "mime": "Тип файла",
+    "digest": "SHA-256 файла",
+    "size": "Размер, байт",
+    "adapter_key": "Площадка",
+    "connection_name": "Подключение",
+    "external_id": "Внешний ID карточки",
+    "source_title": "Наименование в источнике",
 }
 PRODUCT_KEYS = ["id", "revision", *[k for k in CatalogProduct.model_fields if k != "attributes"]]
 SHEETS = {
@@ -377,7 +385,8 @@ def export(catalog, seller, empty=False, product_ids=None):
         "Файлы документов находятся в программе и в резервной копии SQLite, а не внутри XLSX.",
         "Правила задаются по проверенному источнику, сроку и исключениям. Примеры не нормативны.",
         "Заявление для карточки отдельно от фактического нанесения и принятия документа ЧЗ.",
-        "Статусы маркировки справочные. Изменение в Excel не меняет внешние статусы ЧЗ.",
+        "Статусы маркировки, карточки площадок и файлы документов — справочные листы.",
+        "Изменение справочных листов в Excel не меняет файлы, связи или внешние статусы ЧЗ.",
         "Удаление строки ничего не удаляет в программе. Архив — Да; убрать применимость — Нет.",
     ]:
         instructions.append([text])
@@ -407,6 +416,18 @@ def export(catalog, seller, empty=False, product_ids=None):
     }
     for name, (_, keys) in SHEETS.items():
         sheet_table(book, name, keys, rows[name], empty)
+    source_index = {v["source_product_id"]: v for v in data.get("source_details", [])}
+    sheet_table(
+        book, "Карточки площадок",
+        ["product_id", "source_product_id", "adapter_key", "connection_name",
+         "external_id", "variant", "source_title"],
+        [{**link, **source_index.get(link["source_product_id"], {})} for link in data["links"]],
+    )
+    sheet_table(
+        book, "Файлы документов",
+        ["id", "document_id", "filename", "mime", "size", "digest"],
+        [file for document in data["documents"] for file in document["files"]],
+    )
     statuses = []
     if not empty:
         for batch in data["batches"]:
@@ -447,7 +468,8 @@ def inspect(content):
     try:
         native, sheets = "_FBE" in book.sheetnames, []
         for sheet in book:
-            if sheet.title in {"_FBE", "Как заполнить", "Статусы маркировки"}:
+            if sheet.title in {"_FBE", "Как заполнить", "Статусы маркировки",
+                               "Карточки площадок", "Файлы документов"}:
                 continue
             header_row, score, headers = 1, -1, []
             for row_number, row in enumerate(

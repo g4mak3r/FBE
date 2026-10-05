@@ -571,6 +571,7 @@ def test_stage4_migration_preserves_wb_reservations_full_codes_and_running_jobs(
             "catalog_batches",
             "catalog_files",
             "catalog_document_products",
+            "catalog_document_events",
             "catalog_documents",
             "catalog_links",
             "catalog_identifiers",
