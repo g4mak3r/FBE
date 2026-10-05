@@ -11,6 +11,7 @@ from fbe_flow.core.errors import Conflict, FlowError, InvalidInput, NotFound
 from fbe_flow.core.models import NormalizedBatch, OperationResult
 from fbe_flow.integrations.chz.formats import digest, gtin_text
 from fbe_flow.integrations.chz.http import RemoteError
+from fbe_flow.modules.catalog import check_source_binding
 from fbe_flow.modules.connections import connection_context, require_connection
 from fbe_flow.modules.fulfillment import decode_action
 from fbe_flow.modules.marking import canonical
@@ -240,6 +241,7 @@ class Commerce:
         try:
             with self.db.connection() as conn:
                 conn.execute("BEGIN IMMEDIATE")
+                check_source_binding(conn, seller, product["id"], variant, gtin, group)
                 card = conn.execute(
                     "SELECT present,detail_available FROM nk_cards WHERE seller_id=? AND "
                     "connection_id=? "
@@ -302,6 +304,9 @@ class Commerce:
         )
         if not link:
             raise InvalidInput("Сначала свяжите товар с GTIN Честного Знака")
+        with self.db.connection() as conn:
+            check_source_binding(conn, seller, link["product_id"], link["variant"],
+                                 link["gtin"], link["product_group"])
         return order, item, link
 
     def available_codes(self, seller, connection, order_id, item_id, offset=0, limit=100):
@@ -685,6 +690,9 @@ class Commerce:
             link[k] != body[k] for k in ("variant", "chz_connection_id", "gtin", "product_group")
         ):
             raise Conflict("Связь товара с ЧЗ изменилась")
+        with self.db.connection() as conn:
+            check_source_binding(conn, seller, link["product_id"], link["variant"],
+                                 link["gtin"], link["product_group"])
         values = self.fulfillment._check_chz(seller, body)
         with self.db.connection() as conn:
             self.marking._apply_codes(

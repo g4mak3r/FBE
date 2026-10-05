@@ -562,6 +562,19 @@ def test_stage4_migration_preserves_wb_reservations_full_codes_and_running_jobs(
         for name in ("wb_reserve_code", "wb_release_code", "wb_assignment_immutable"):
             conn.execute(f"DROP TRIGGER {name}")
         for name in (
+            "catalog_imports",
+            "catalog_checks",
+            "catalog_schemas",
+            "catalog_rules",
+            "catalog_events",
+            "catalog_units",
+            "catalog_batches",
+            "catalog_files",
+            "catalog_document_products",
+            "catalog_documents",
+            "catalog_links",
+            "catalog_identifiers",
+            "catalog_products",
             "commerce_targets",
             "commerce_events",
             "commerce_actions",
@@ -575,7 +588,7 @@ def test_stage4_migration_preserves_wb_reservations_full_codes_and_running_jobs(
         conn.execute("UPDATE operations SET status='running' WHERE id=?", (job["id"],))
     state.database.initialize()
     with state.database.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
         rows = conn.execute("SELECT code,origin,action_id FROM code_reservations").fetchall()
         assert {r[0] for r in rows} == set(action["body"]["cis"])

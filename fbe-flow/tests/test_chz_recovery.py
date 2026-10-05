@@ -61,7 +61,7 @@ def test_upgrade_from_v2_backs_up_and_preserves_existing_identity_and_scope(tmp_
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
         assert conn.execute("SELECT name FROM sellers").fetchone()[0] == "Preserved"
     with database.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
         assert conn.execute("SELECT name FROM sellers").fetchone()[0] == "Preserved"
     before = backup_path.read_bytes()
     database.initialize()
@@ -109,7 +109,7 @@ def test_upgrade_from_stage1_v3_preserves_cards_connection_refs_and_queue(tmp_pa
         )
     database.initialize()
     with database.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
         assert (
             dict(conn.execute("SELECT * FROM products WHERE id=?", (product,)).fetchone())["title"]
             == "Original"

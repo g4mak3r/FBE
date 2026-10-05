@@ -13,6 +13,7 @@ from fbe_flow.core.models import Contract, NormalizedBatch, OperationResult, Tex
 from fbe_flow.integrations.chz.formats import digest, gtin_text
 from fbe_flow.integrations.chz.http import RemoteError
 from fbe_flow.integrations.wb.adapter import order_ids
+from fbe_flow.modules.catalog import check_source_binding
 from fbe_flow.modules.connections import connection_context, require_connection
 from fbe_flow.modules.marking import canonical
 from fbe_flow.modules.records import Records, decode_record
@@ -223,6 +224,9 @@ class Fulfillment:
                 "AND l.chrt_id=? AND p.external_id=?",
                 (seller, connection, str(source.get("chrtId")), str(source.get("nmId"))),
             ).fetchone()
+            if row:
+                check_source_binding(conn, seller, row["product_id"], row["chrt_id"],
+                                     row["gtin"], row["product_group"])
         if not row:
             raise InvalidInput("Сначала свяжите размер товара WB с GTIN Честного Знака")
         return order, dict(row)
@@ -278,6 +282,7 @@ class Fulfillment:
         adapter.require_group(adapter.config(connection_context(chz)), group)
         with self.db.connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            check_source_binding(conn, seller, product["id"], variant, code, group)
             present = conn.execute(
                 "SELECT present,detail_available FROM nk_cards WHERE seller_id=? AND "
                 "connection_id=? AND external_id=?",
@@ -426,6 +431,9 @@ class Fulfillment:
             )
             if not link:
                 raise InvalidInput("Сначала свяжите размер товара WB с GTIN Честного Знака")
+            with self.db.connection() as conn:
+                check_source_binding(conn, seller, link["product_id"], link["chrt_id"],
+                                     link["gtin"], link["product_group"])
             codes = self.marking.validate_code_selection(
                 seller, link["chz_connection_id"], payload["code_ids"], full=True
             )
@@ -675,6 +683,12 @@ class Fulfillment:
         }
 
     def _check_chz(self, seller, body):
+        with self.db.connection() as conn:
+            link = conn.execute("SELECT * FROM wb_links WHERE seller_id=? AND id=?",
+                                (seller, body.get("link_id", ""))).fetchone()
+            if link:
+                check_source_binding(conn, seller, link["product_id"], link["chrt_id"],
+                                     body["gtin"], body["product_group"])
         chz = self.marking._connection(seller, body["chz_connection_id"])
         wb_codes = self.marking.validate_code_selection(
             seller, chz["id"], body["code_ids"], full=True

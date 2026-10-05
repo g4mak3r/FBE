@@ -453,7 +453,7 @@ def preview(catalog, seller, content, profile="fbe", sheet_name=None, header_row
             if "_FBE" not in book.sheetnames:
                 raise InvalidInput("Это не шаблон FBE. Выберите WB, Ozon или другой формат")
             meta = dict(book["_FBE"].iter_rows(values_only=True))
-            if meta.get("format") != FORMAT or meta.get("seller_id") not in {"", seller}:
+            if meta.get("format") != FORMAT or meta.get("seller_id") not in {None, "", seller}:
                 raise InvalidInput("Версия шаблона или продавец не соответствует рабочей области")
             selected = [book[name] for name in SHEETS if name in book.sheetnames]
         else:
