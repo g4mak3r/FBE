@@ -122,7 +122,7 @@ class CatalogBatch(CatalogContract):
 
 
 class RuleCondition(CatalogContract):
-    field: Short
+    field: Annotated[Text, Field(max_length=251)]
     operator: Literal["eq", "ne", "gt", "ge", "lt", "le"]
     value: JsonValue
 

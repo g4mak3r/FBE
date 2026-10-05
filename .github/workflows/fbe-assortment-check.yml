@@ -16,6 +16,7 @@ jobs:
       run:
         working-directory: fbe-flow
     steps:
+      - uses: actions/checkout@v4
       - name: Stop obsolete benchmark run
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,7 +35,6 @@ jobs:
           except urllib.error.HTTPError as error:
               print("Obsolete benchmark no longer active or cancellation unavailable:", error.code)
           PY
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -72,6 +72,7 @@ jobs:
         working-directory: fbe-flow/qa
         run: npx playwright install --with-deps chromium
       - name: Large assortment roundtrip
+        timeout-minutes: 5
         run: python -m qa.catalog_benchmark --count 30000
       - name: Browser acceptance
         env:
