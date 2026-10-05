@@ -1,11 +1,10 @@
 """Assortment acceptance checks use isolated sellers and XLSX files."""
+
 import base64
 import io
 import json
-import sqlite3
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -17,7 +16,6 @@ from fbe_flow.core.catalog_models import CatalogProduct, normalize_gtin
 from fbe_flow.core.errors import Conflict, InvalidInput, NotFound
 from fbe_flow.modules import catalog_xlsx
 from fbe_flow.modules.catalog import check_source_binding
-from fbe_flow.core.models import NormalizedBatch, Product
 
 from .conftest import normalized_batch
 
@@ -29,8 +27,13 @@ def gtin(number=1):
 
 
 def data(number=1, **changes):
-    return {"title": f"Товар {number}", "sku": f"{number:03d}", "gtins": [gtin(number)],
-            "tnved": "3303001000", **changes}
+    return {
+        "title": f"Товар {number}",
+        "sku": f"{number:03d}",
+        "gtins": [gtin(number)],
+        "tnved": "3303001000",
+        **changes,
+    }
 
 
 @pytest.fixture
@@ -89,11 +92,20 @@ def test_identity_revision_archive_and_seller_scope(assortment):
     assert state.catalog.list(seller, archived=True)["total"] == 1
 
 
-@pytest.mark.parametrize("changes", [
-    {"gtins": ["00000000000001"]}, {"gtins": [123]}, {"gross_weight_g": "10", "net_weight_g": "20"},
-    {"length_mm": "-1"}, {"length_mm": "Infinity"}, {"title": "Bad\x01value"},
-    {"tnved": "3303"}, {"package_quantity": 1.2}, {"attributes": {"key": float("nan")}},
-])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"gtins": ["00000000000001"]},
+        {"gtins": [123]},
+        {"gross_weight_g": "10", "net_weight_g": "20"},
+        {"length_mm": "-1"},
+        {"length_mm": "Infinity"},
+        {"title": "Bad\x01value"},
+        {"tnved": "3303"},
+        {"package_quantity": 1.2},
+        {"attributes": {"key": float("nan")}},
+    ],
+)
 def test_invalid_trade_items_are_rejected(changes):
     with pytest.raises(ValueError):
         CatalogProduct.model_validate(data(**changes))
@@ -111,10 +123,16 @@ def test_gtin_preserves_zeroes_and_uniqueness_per_seller(assortment):
 
 def test_full_export_roundtrip_is_formula_safe_and_lossless(assortment):
     state, _, seller, _ = assortment
-    p = create(assortment, title="=1+2", description="#CLEAR", length_mm="12.3456",
-               attributes={"text": "#CLEAR", "null": None, "number": 1.25, "__proto__": {"x": 1}})
-    state.catalog.save_document(seller, {"kind": "declaration", "number": "ЕАЭС N 001",
-                                        "product_ids": [p["id"]]})
+    p = create(
+        assortment,
+        title="=1+2",
+        description="#CLEAR",
+        length_mm="12.3456",
+        attributes={"text": "#CLEAR", "null": None, "number": 1.25, "__proto__": {"x": 1}},
+    )
+    state.catalog.save_document(
+        seller, {"kind": "declaration", "number": "ЕАЭС N 001", "product_ids": [p["id"]]}
+    )
     state.catalog.save_batch(seller, {"product_id": p["id"], "name": "Партия 001", "quantity": 5})
     content = catalog_xlsx.export(state.catalog, seller)
     book = load_workbook(io.BytesIO(content), data_only=False)
@@ -132,11 +150,15 @@ def test_native_template_creates_product_documents_attributes_and_batch(assortme
     state, _, seller, _ = assortment
     content = catalog_xlsx.export(state.catalog, seller, empty=True)
     content = edit(content, "Товары", {3: data()})
-    content = edit(content, "Характеристики", {3: {"product_id": "001", "field": "Цвет",
-                                                 "value": '"Синий"'}})
+    content = edit(
+        content, "Характеристики", {3: {"product_id": "001", "field": "Цвет", "value": '"Синий"'}}
+    )
     content = edit(content, "Документы", {3: {"kind": "declaration", "number": "ДоС-001"}})
-    content = edit(content, "Применимость", {3: {"product_id": "001", "document_id": "ДоС-001",
-                                                "linked": True}})
+    content = edit(
+        content,
+        "Применимость",
+        {3: {"product_id": "001", "document_id": "ДоС-001", "linked": True}},
+    )
     content = edit(content, "Партии", {3: {"product_id": "001", "name": "Партия", "quantity": 2}})
     plan = preview(assortment, content)
     assert not plan["errors"]
@@ -152,8 +174,11 @@ def test_native_template_creates_product_documents_attributes_and_batch(assortme
 def test_blank_cells_preserve_explicit_clear_removes_and_import_is_single_use(assortment):
     state, _, seller, _ = assortment
     p = create(assortment, brand="Бренд", description="Старое")
-    content = edit(catalog_xlsx.export(state.catalog, seller), "Товары",
-                   {3: {"brand": None, "description": "#CLEAR", "title": "Новое"}})
+    content = edit(
+        catalog_xlsx.export(state.catalog, seller),
+        "Товары",
+        {3: {"brand": None, "description": "#CLEAR", "title": "Новое"}},
+    )
     plan = preview(assortment, content)
     assert not plan["errors"]
     assert state.catalog.product(seller, p["id"])["title"] == "Товар 1"
@@ -167,8 +192,11 @@ def test_blank_cells_preserve_explicit_clear_removes_and_import_is_single_use(as
 def test_import_rolls_back_every_change_if_a_later_row_changed(assortment):
     state, _, seller, _ = assortment
     p, q = create(assortment), create(assortment, 2)
-    content = edit(catalog_xlsx.export(state.catalog, seller), "Товары",
-                   {3: {"title": "Первый"}, 4: {"title": "Второй"}})
+    content = edit(
+        catalog_xlsx.export(state.catalog, seller),
+        "Товары",
+        {3: {"title": "Первый"}, 4: {"title": "Второй"}},
+    )
     plan = preview(assortment, content)
     assert not plan["errors"]
     state.catalog.save_product(seller, data(2, title="Параллельно"), q["id"], q["revision"])
@@ -206,7 +234,9 @@ def test_import_scope_cancel_digest_and_local_origin_boundary(assortment):
         apply(assortment, plan)
     body = {"filename": "base.xlsx", "content": base64.b64encode(content).decode()}
     path = f"/api/sellers/{seller}/catalog/xlsx/preview"
-    assert client.post(path, json=body, headers={"Origin": "https://foreign.test"}).status_code == 403
+    assert (
+        client.post(path, json=body, headers={"Origin": "https://foreign.test"}).status_code == 403
+    )
     assert client.post(path, json=body).status_code == 201
 
 
@@ -214,8 +244,17 @@ def external():
     book = Workbook()
     sheet = book.active
     sheet.title = "Товары WB"
-    sheet.append(["Артикул продавца", "Название товара", "Длина упаковки, см",
-                  "Вес с упаковкой, кг", "Баркод", "Номер ДоС", "Цвет"])
+    sheet.append(
+        [
+            "Артикул продавца",
+            "Название товара",
+            "Длина упаковки, см",
+            "Вес с упаковкой, кг",
+            "Баркод",
+            "Номер ДоС",
+            "Цвет",
+        ]
+    )
     sheet.append(["001", "Товар", "12.5", "0.25", gtin(), "ДоС-001", "Синий"])
     return book
 
@@ -225,8 +264,14 @@ def test_external_template_mapping_units_documents_and_unknown_attributes(assort
     content = book_bytes(external())
     found = catalog_xlsx.inspect(content)["sheets"][0]
     assert found["mapping"][2]["scale"] == "10"
-    plan = preview(assortment, content, profile="wb", sheet_name=found["name"],
-                   header_row=found["header_row"], mapping=found["mapping"])
+    plan = preview(
+        assortment,
+        content,
+        profile="wb",
+        sheet_name=found["name"],
+        header_row=found["header_row"],
+        mapping=found["mapping"],
+    )
     assert not plan["errors"]
     apply(assortment, plan)
     p = state.catalog.list(seller)["items"][0]
@@ -237,8 +282,13 @@ def test_external_template_mapping_units_documents_and_unknown_attributes(assort
 
 def test_fill_keeps_other_sheets_styles_and_validation_but_replaces_examples(assortment):
     state, _, seller, _ = assortment
-    p = create(assortment, length_mm="125", gross_weight_g="250", barcodes=[gtin()],
-               attributes={"Цвет": "Синий"})
+    p = create(
+        assortment,
+        length_mm="125",
+        gross_weight_g="250",
+        barcodes=[gtin()],
+        attributes={"Цвет": "Синий"},
+    )
     book = external()
     sheet = book.active
     sheet["A2"].fill = PatternFill("solid", fgColor="FF0000")
@@ -250,13 +300,14 @@ def test_fill_keeps_other_sheets_styles_and_validation_but_replaces_examples(ass
     content = book_bytes(book)
     found = catalog_xlsx.inspect(content)["sheets"][0]
     mapping = [v for v in found["mapping"] if v["field"] != "document_number"]
-    output = catalog_xlsx.fill_template(state.catalog, seller, content, [p["id"]],
-                                       found["name"], found["header_row"], mapping)
+    output = catalog_xlsx.fill_template(
+        state.catalog, seller, content, [p["id"]], found["name"], found["header_row"], mapping
+    )
     result = load_workbook(io.BytesIO(output))
     assert result["Справочник"]["A1"].value == "Сохранить"
     assert result[found["name"]]["A2"].fill.fgColor.rgb == "00FF0000"
     assert result[found["name"]]["C2"].value == 12.5
-    assert result[found["name"]]["D2"].value == .25
+    assert result[found["name"]]["D2"].value == 0.25
     assert result[found["name"]]["A3"].value is None
     assert len(result[found["name"]].data_validations.dataValidation) == 1
 
@@ -284,21 +335,36 @@ def test_entity_declarations_are_rejected_before_xml_parsing():
 
 
 def rule(**changes):
-    return {"title": "Проверенное правило", "product_group": "test-group", "marking_required": True,
-            "tnved_prefixes": ["3303"], "valid_from": "2020-01-01", "source_url": "https://example.test/rules",
-            "source_note": "Изолированный тест; не нормативное правило", **changes}
+    return {
+        "title": "Проверенное правило",
+        "product_group": "test-group",
+        "marking_required": True,
+        "tnved_prefixes": ["3303"],
+        "valid_from": "2020-01-01",
+        "source_url": "https://example.test/rules",
+        "source_note": "Изолированный тест; не нормативное правило",
+        **changes,
+    }
 
 
 def test_dated_rules_conditions_ambiguity_and_incomplete_inputs(assortment):
     state, _, seller, _ = assortment
     p = create(assortment, volume_ml="100")
-    state.catalog.save_rule(seller, rule(conditions=[{"field": "volume_ml", "operator": "eq", "value": 100}]))
+    state.catalog.save_rule(
+        seller, rule(conditions=[{"field": "volume_ml", "operator": "eq", "value": 100}])
+    )
     assert state.catalog.classify(seller, p)["state"] == "matched"
     assert state.catalog.classify(seller, p, "2019-01-01")["state"] == "unknown"
     state.catalog.save_rule(seller, rule(title="Исключение", marking_required=False))
     assert state.catalog.classify(seller, p)["state"] == "ambiguous"
-    state.catalog.save_rule(seller, rule(title="Нет данных", priority=10,
-                                        conditions=[{"field": "composition", "operator": "eq", "value": "A"}]))
+    state.catalog.save_rule(
+        seller,
+        rule(
+            title="Нет данных",
+            priority=10,
+            conditions=[{"field": "composition", "operator": "eq", "value": "A"}],
+        ),
+    )
     assert state.catalog.classify(seller, p)["state"] == "incomplete"
 
 
@@ -306,9 +372,19 @@ def test_document_files_shared_applicability_scope_and_manual_verification(assor
     state, client, seller, other = assortment
     p, q = create(assortment), create(assortment, 2)
     with pytest.raises(InvalidInput):
-        state.catalog.save_document(seller, {"kind": "declaration", "number": "001", "status": "verified"})
-    d = state.catalog.save_document(seller, {"kind": "declaration", "number": "001", "status": "verified",
-                                            "verification_note": "Оператор проверил", "product_ids": [p["id"], q["id"]]})
+        state.catalog.save_document(
+            seller, {"kind": "declaration", "number": "001", "status": "verified"}
+        )
+    d = state.catalog.save_document(
+        seller,
+        {
+            "kind": "declaration",
+            "number": "001",
+            "status": "verified",
+            "verification_note": "Оператор проверил",
+            "product_ids": [p["id"], q["id"]],
+        },
+    )
     attached = state.catalog.add_file(seller, d["id"], "document.pdf", b"%PDF-1.4\nfixture")
     assert state.catalog.file(seller, attached["id"])["content"].startswith(b"%PDF")
     with pytest.raises(NotFound):
@@ -322,12 +398,14 @@ def test_document_files_shared_applicability_scope_and_manual_verification(assor
 def test_concurrent_edit_has_exactly_one_winner(assortment):
     state, _, seller, _ = assortment
     p = create(assortment)
+
     def change(title):
         try:
             state.catalog.save_product(seller, data(title=title), p["id"], p["revision"])
             return True
         except Conflict:
             return False
+
     with ThreadPoolExecutor(max_workers=2) as executor:
         assert sorted(executor.map(change, ["One", "Two"])) == [False, True]
 
@@ -337,6 +415,7 @@ def test_source_sync_never_overwrites_canonical_and_stable_link_survives(db, set
     from fbe_flow.modules.catalog import Catalog
     from fbe_flow.modules.connections import Connections
     from fbe_flow.modules.records import Records
+
     catalog = Catalog(db, Connections(db, registry), registry, None)
     records = Records(db)
     records.apply(first, connection, normalized_batch("Источник"))
@@ -359,10 +438,20 @@ def test_local_printing_and_application_do_not_change_chz_status(workspace):
     b = state.catalog.save_batch(seller, {"product_id": p["id"], "name": "Партия", "quantity": 1})
     code_id = str(uuid4())
     with state.database.connection() as conn:
-        conn.execute("INSERT INTO marking_codes(id,seller_id,connection_id,code,full_code,gtin,"
-                     "product_group,external_status) VALUES(?,?,?,?,?,?,?,?)",
-                     (code_id, seller, connection["id"], "01" + gtin() + "21SERIAL",
-                      "01" + gtin() + "21SERIAL\x1d91KEY\x1d92CRYPTO", gtin(), provider.group, "EMITTED"))
+        conn.execute(
+            "INSERT INTO marking_codes(id,seller_id,connection_id,code,full_code,gtin,"
+            "product_group,external_status) VALUES(?,?,?,?,?,?,?,?)",
+            (
+                code_id,
+                seller,
+                connection["id"],
+                "01" + gtin() + "21SERIAL",
+                "01" + gtin() + "21SERIAL\x1d91KEY\x1d92CRYPTO",
+                gtin(),
+                provider.group,
+                "EMITTED",
+            ),
+        )
     calls = len(provider.calls)
     state.catalog.assign_codes(seller, b["id"], [code_id])
     state.catalog.record_code_event(seller, b["id"], [code_id], "printed", "Оператор")

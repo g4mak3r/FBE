@@ -94,3 +94,5 @@ dialog[id^="commerce-"] form { max-width: none; }
 
 .catalog-dialog form { max-width: none; }
 .catalog-dialog { max-height: 90vh; overflow-y: auto; }
+
+[hidden] { display: none !important; }

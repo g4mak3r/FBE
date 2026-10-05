@@ -42,3 +42,23 @@ jobs:
       - name: Full regression tests
         if: always()
         run: python -m pytest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install browser checks
+        run: |
+          npm --prefix qa install --ignore-scripts
+          python -c 'import json; from pathlib import Path; print("FBE_FORMAT fbe-flow/qa/package-lock.json 0 " + json.dumps(Path("qa/package-lock.json").read_text()))'
+      - name: Install Chromium
+        working-directory: fbe-flow/qa
+        run: npx playwright install --with-deps chromium
+      - name: Browser acceptance
+        env:
+          FBE_QA_EMIT_IMAGES: "1"
+        run: node qa/catalog_browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: assortment-browser-screenshots
+          path: fbe-flow/qa/artifacts/
+          if-no-files-found: ignore

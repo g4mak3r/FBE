@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "test": "node catalog_browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
