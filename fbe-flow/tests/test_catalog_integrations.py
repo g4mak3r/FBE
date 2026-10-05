@@ -334,7 +334,7 @@ def test_existing_wb_and_ozon_workflows_enforce_active_canonical_binding(tmp_pat
         state = app.state
         wb_product = next(
             p
-            for p in state.fulfillment.records(seller, wb["id"], "products")["items"]
+            for p in state.fulfillment.records(seller, wb["id"], "products", limit=200)["items"]
             if p["external_id"] == "1"
         )
         nk = next(

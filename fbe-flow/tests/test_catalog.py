@@ -477,7 +477,7 @@ def test_local_printing_and_application_do_not_change_chz_status(workspace):
     assert status_sheet.max_row == 3
     assert status_sheet["C3"].value == gtin()
     assert status_sheet["D3"].value == "EMITTED"
-    unchanged = preview(assortment, content)
+    unchanged = catalog_xlsx.preview(state.catalog, seller, content)
     assert unchanged["errors"] == [] and unchanged["operations"] == []
     with pytest.raises(Conflict):
         state.catalog.assign_codes(seller, b["id"], [code_id])
