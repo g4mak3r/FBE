@@ -52,6 +52,8 @@ jobs:
       - name: Install Chromium
         working-directory: fbe-flow/qa
         run: npx playwright install --with-deps chromium
+      - name: Large assortment roundtrip
+        run: python -m qa.catalog_benchmark --count 30000
       - name: Browser acceptance
         env:
           FBE_QA_EMIT_IMAGES: "1"

@@ -1,5 +1,7 @@
 """Change one cell as an operator would in the exported workbook."""
+
 import sys
+
 from openpyxl import load_workbook
 
 book = load_workbook(sys.argv[1])

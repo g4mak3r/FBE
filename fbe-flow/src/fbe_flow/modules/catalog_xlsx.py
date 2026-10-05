@@ -450,10 +450,12 @@ def inspect(content):
             if sheet.title in {"_FBE", "Как заполнить", "Статусы маркировки"}:
                 continue
             header_row, score, headers = 1, -1, []
-            for row in sheet.iter_rows(min_row=1, max_row=min(sheet.max_row, 30)):
+            for row_number, row in enumerate(
+                sheet.iter_rows(min_row=1, max_row=min(sheet.max_row, 30)), 1
+            ):
                 current = sum(normal(c.value) in ALIASES for c in row if c.value is not None)
                 if current > score:
-                    header_row, score = row[0].row, current
+                    header_row, score = row_number, current
                     headers = [str(c.value or "") for c in row]
             if native and sheet.title in SHEETS:
                 header_row = 2
@@ -501,7 +503,7 @@ def read_rows(sheet, start_row, mapping, warnings):
     if any(not 1 <= v <= sheet.max_column for v in columns):
         raise InvalidInput("Колонка находится за границей листа")
     result, errors, ignored = [], [], set()
-    for row in sheet.iter_rows(min_row=start_row):
+    for row_number, row in enumerate(sheet.iter_rows(min_row=start_row), start_row):
         if not any(v.value is not None for v in row):
             continue
         record, supplied = {}, set()
@@ -526,14 +528,14 @@ def read_rows(sheet, start_row, mapping, warnings):
                 errors.append(
                     {
                         "sheet": sheet.title,
-                        "row": row[0].row,
+                        "row": row_number,
                         "column": item["column"],
                         "field": field,
                         "message": str(exc),
                     }
                 )
         if record:
-            result.append((row[0].row, record, supplied))
+            result.append((row_number, record, supplied))
     if ignored:
         warnings.append(
             {
@@ -601,7 +603,11 @@ def preview(
         if native:
             if "_FBE" not in book.sheetnames:
                 raise InvalidInput("Это не шаблон FBE. Выберите WB, Ozon или другой формат")
-            meta = dict(book["_FBE"].iter_rows(values_only=True))
+            meta = {}
+            for row in book["_FBE"].iter_rows(values_only=True):
+                if len(row) != 2 or not isinstance(row[0], str) or row[0] in meta:
+                    raise InvalidInput("Повреждены метаданные шаблона FBE")
+                meta[row[0]] = row[1]
             if meta.get("format") != FORMAT or meta.get("seller_id") not in {None, "", seller}:
                 raise InvalidInput("Версия шаблона или продавец не соответствует рабочей области")
             selected = [book[name] for name in SHEETS if name in book.sheetnames]
@@ -640,6 +646,15 @@ def preview(
             if kind in {"attributes", "document_products", "link"}:
                 deferred.extend((kind, sheet.title, *record) for record in records)
                 continue
+            default_document_kind = "declaration"
+            if not native:
+                for item in row_mapping:
+                    if item.get("field") == "document_number":
+                        name = normal(sheet.cell(header_row or 1, item["column"]).value)
+                        if "сертификат" in name:
+                            default_document_kind = "certificate"
+                        elif "сгр" in name or "государственнойрегистрации" in name:
+                            default_document_kind = "sgr"
             for row, values, _supplied in records:
                 try:
                     entity_id, revision = values.pop("id", None), values.pop("revision", None)
@@ -657,7 +672,7 @@ def preview(
                     extras = {k[11:]: v for k, v in values.items() if k.startswith("attributes.")}
                     values = {k: v for k, v in values.items() if not k.startswith("attributes.")}
                     doc_number = values.pop("document_number", None)
-                    doc_kind = values.pop("document_kind", None) or "declaration"
+                    doc_kind = values.pop("document_kind", None) or default_document_kind
                     if kind == "product":
                         data["attributes"] = {**data.get("attributes", {}), **extras}
                         for field in extras:
@@ -731,6 +746,7 @@ def preview(
                 except (InvalidInput, Conflict, TypeError, ValueError) as exc:
                     error(sheet.title, row, exc)
         seen_attrs, seen_associations, seen_links = set(), set(), set()
+        document_members = {}
         for kind, sheet, row, values, supplied in deferred:
             try:
                 product_id = resolve_product(values.get("product_id"))
@@ -764,11 +780,14 @@ def preview(
                     if (document_id, product_id) in seen_associations:
                         raise InvalidInput("Применимость повторяется в файле")
                     seen_associations.add((document_id, product_id))
-                    ids = op["data"]["product_ids"]
-                    if values.get("linked", True) and product_id not in ids:
-                        ids.append(product_id)
-                    elif not values.get("linked", True) and product_id in ids:
-                        ids.remove(product_id)
+                    members = document_members.get(document_id)
+                    if members is None:
+                        members = dict.fromkeys(op["data"]["product_ids"])
+                        document_members[document_id] = members
+                    if values.get("linked", True):
+                        members[product_id] = None
+                    else:
+                        members.pop(product_id, None)
                 else:
                     source_id = values.get("source_product_id")
                     if not source_id:
@@ -798,6 +817,8 @@ def preview(
                     )
             except (InvalidInput, Conflict, ValueError, TypeError) as exc:
                 error(sheet, row, exc)
+        for document_id, members in document_members.items():
+            doc_ops[document_id]["data"]["product_ids"] = list(members)
         operations.sort(
             key=lambda v: {"product": 0, "document": 1, "batch": 2, "rule": 3, "link": 4}[v["kind"]]
         )

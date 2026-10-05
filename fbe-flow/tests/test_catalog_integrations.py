@@ -25,6 +25,7 @@ from fbe_flow.modules.sellers import Sellers
 from .chz_fixtures import FixtureSigner, MemoryVault
 from .chz_workflow_fixtures import WorkflowProvider
 from .test_catalog import data, gtin, rule
+from .wb_fixtures import token
 
 
 def fixture_reply(data):
@@ -47,7 +48,8 @@ class CatalogProvider(WorkflowProvider):
         path = urlparse(url).path
         if path.endswith("/tn-ved/search"):
             self.calls.append((method, path, copy.deepcopy(params), copy.deepcopy(body)))
-            return fixture_reply({
+            return fixture_reply(
+                {
                     "tnveds": [{"tnved": "3303001000", "pg": self.registry_group}],
                     "total": 1,
                     "last": True,
@@ -55,7 +57,8 @@ class CatalogProvider(WorkflowProvider):
             )
         if path.endswith("/product/info"):
             self.calls.append((method, path, copy.deepcopy(params), copy.deepcopy(body)))
-            return fixture_reply({
+            return fixture_reply(
+                {
                     "results": [{"gtin": gtin(), "productGroup": self.ready_group, "permits": {}}]
                     if self.ready
                     else []
@@ -244,13 +247,11 @@ class SchemaTransport:
 def schema_adapter(channel, monkeypatch):
     vault, transport = MemoryVault(), SchemaTransport()
     seller = str(uuid4())
-    ref = vault.put(seller, {channel + "_token": "fixture"})
+    ref = vault.put(seller, {channel + "_token": token(mask=18 | (1 << 30), sid="100") if channel == "wb" else "fixture"})
     adapter = (WbAdapter if channel == "wb" else OzonAdapter)(
         vault, transport, pause=lambda _: None
     )
     config = {"credential_ref": ref, "account_id": "100", "tin": "123456789012", "read_only": True}
-    if channel == "wb":
-        monkeypatch.setattr(adapter, "validate_binding", lambda *_: None)
     monkeypatch.setattr(adapter, "account", lambda _: {"account_id": "100", "tin": config["tin"]})
     context = ConnectionContext(
         seller_id=seller, connection_id="schema", external_account_id="100", config=config

@@ -475,3 +475,44 @@ def test_catalog_api_page_assets_and_empty_export_exist(assortment):
     assert client.get(f"/api/sellers/{seller}/catalog/xlsx/template").status_code == 200
     with state.database.connection() as conn:
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_external_sheet_with_empty_first_column_and_blank_helper_sheet(assortment):
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Товары"
+    sheet.append([None, "Артикул продавца", "Название товара"])
+    sheet.append([None, "NEW-001", "Товар"])
+    book.create_sheet("Пустой лист")
+    content = book_bytes(book)
+    found = catalog_xlsx.inspect(content)
+    first = found["sheets"][0]
+    plan = preview(assortment, content, profile="custom", sheet_name=first["name"],
+                   header_row=first["header_row"], mapping=first["mapping"])
+    assert not plan["errors"] and plan["operations"][0]["row"] == 2
+    apply(assortment, plan)
+
+
+def test_corrupted_native_metadata_reports_validation_error(assortment):
+    state, client, seller, _ = assortment
+    content = catalog_xlsx.export(state.catalog, seller, empty=True)
+    book = load_workbook(io.BytesIO(content))
+    book["_FBE"]["C1"] = "extra"
+    content = book_bytes(book)
+    response = client.post(f"/api/sellers/{seller}/catalog/xlsx/preview",
+                           json={"filename": "bad.xlsx", "content": base64.b64encode(content).decode()})
+    assert response.status_code == 422
+    assert state.catalog.list(seller)["total"] == 0
+
+
+def test_certificate_column_preserves_document_type(assortment):
+    book = Workbook()
+    book.active.append(["Артикул", "Наименование", "Номер сертификата"])
+    book.active.append(["CERT-001", "Товар", "Сертификат 001"])
+    content = book_bytes(book)
+    found = catalog_xlsx.inspect(content)["sheets"][0]
+    plan = preview(assortment, content, profile="wb", sheet_name=found["name"],
+                   header_row=found["header_row"], mapping=found["mapping"])
+    assert not plan["errors"]
+    apply(assortment, plan)
+    assert assortment[0].catalog.documents(assortment[2])[0]["kind"] == "certificate"

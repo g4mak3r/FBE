@@ -1067,7 +1067,8 @@ class Catalog:
         if not method:
             raise InvalidInput("Адаптер ЧЗ не поддерживает сверку ассортимента")
         rules = self.rules(seller)
-        classification = self.classify(seller, product)
+        checked_on = date.today().isoformat()
+        classification = self.classify(seller, product, checked_on)
         observed = method(connection_context(connection), clean_product(product))
         observed["connection_digest"] = digest(connection["config"])
         issues = list(observed.get("issues", []))
@@ -1131,7 +1132,7 @@ class Catalog:
                     )
         result = {
             "state": "matched" if not issues else "needs_review",
-            "checked_on": date.today().isoformat(),
+            "checked_on": checked_on,
             "classification": classification,
             "observed": observed,
             "issues": issues,
