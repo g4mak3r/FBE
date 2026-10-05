@@ -143,6 +143,7 @@ async function main() {
     await page.locator("#catalog-products tr").filter({ hasText: "QA-003" }).waitFor();
     await checkLayout(); await screenshot("catalog-mobile-list");
     await page.locator("#catalog-products tr").filter({ hasText: "QA-003" }).getByRole("button", { name: "Открыть" }).click();
+    await page.locator("#catalog-product-dialog").waitFor({ state: "visible" });
     await checkLayout(); await screenshot("catalog-mobile-dialog");
     await page.locator('[data-close="catalog-product-dialog"]').click();
     const foreign = root + "/api/sellers/" + meta.other + "/catalog";

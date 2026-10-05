@@ -48,7 +48,6 @@ jobs:
           if ($parseErrors.Count -gt 0) { throw 'Invalid PowerShell bridge syntax' }
 
   browser:
-    needs: foundation
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
