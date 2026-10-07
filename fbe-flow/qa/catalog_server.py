@@ -235,14 +235,24 @@ def main():
         )
         with state.database.connection() as conn:
             state.fulfillment.snapshot(conn, seller, wb["id"], "last_sync", {"counts": {}})
-            state.fulfillment.snapshot(conn, seller, wb["id"], "sync", {"state": "complete"})
+            state.fulfillment.snapshot(
+                conn,
+                seller,
+                wb["id"],
+                "sync",
+                {"state": "succeeded", "coverage": "complete", "counts": {}},
+            )
             state.commerce.snapshot(
                 conn, seller, ozon_connection["id"], "last_sync", {"counts": {}}
             )
             state.commerce.snapshot(conn, seller, kit["id"], "last_sync", {"counts": {}})
             for connection in (ozon_connection, kit):
                 state.commerce.snapshot(
-                    conn, seller, connection["id"], "sync", {"state": "complete"}
+                    conn,
+                    seller,
+                    connection["id"],
+                    "sync",
+                    {"state": "succeeded", "coverage": "complete", "counts": {}},
                 )
         initial = state.catalog.save_product(seller, data())
         code_id = str(uuid4())

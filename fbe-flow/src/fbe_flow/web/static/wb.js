@@ -35,6 +35,7 @@
   const base = () => `${root}/${encodeURIComponent(connection)}`;
   const actionNames = { sgtin: "Передача кодов ЧЗ", supply_create: "Создание поставки", supply_add: "Состав поставки", supply_deliver: "Передача в доставку", supply_delete: "Удаление пустой поставки" };
   const actionStates = { draft: "Подготовлено", queued: "В очереди", submitting: "Отправляется", accepted: "WB принял запрос", pending: "Ожидает подтверждения WB", confirmed: "Подтверждено WB", rejected: "Отклонено", unknown: "Ответ потерян — требуется сверка", conflict: "Результат расходится — требуется проверка", partial: "Часть заданий добавлена", cancelled: "Отменено" };
+  const syncStates = {queued: "В очереди", running: "Обновляется", succeeded: "Обновлено", failed: "Ошибка чтения", interrupted: "Чтение прервано"};
   const orderStates = { new: "Новое", confirm: "На сборке", complete: "В доставке", cancel: "Отменено" };
   const supplyStates = { open: "На сборке", closed: "Ожидает отгрузки", scanned: "Передано WB", deleted: "Удалено" };
   function statusOptions(previewStage = stage, previewStatus = status) {
@@ -201,7 +202,7 @@
     document.querySelector('#wb-create-supply [type="submit"]').disabled = !!parameters.read_only;
     const sync = overview.snapshots.sync?.value;
     document.getElementById("wb-sync").disabled = ["queued", "running"].includes(sync?.state);
-    document.getElementById("wb-sync-status").textContent = sync ? `Синхронизация: ${states[sync.state] || sync.state} · ${syncPhases[sync.phase] || ""}${sync.error ? ` · ${sync.error}` : ""}` : "Ещё не синхронизировано";
+    document.getElementById("wb-sync-status").textContent = sync ? `Синхронизация: ${syncStates[sync.state] || "Проверьте обновление"} · ${syncPhases[sync.phase] || ""}${sync.error ? ` · ${sync.error}` : ""}` : "Ещё не синхронизировано";
     document.getElementById("wb-summary").textContent = `Обновлено: ${overview.snapshots.last_sync ? new Date(overview.snapshots.last_sync.updated_at).toLocaleString("ru-RU") : "еще не обновлялось"}${parameters.read_only ? " · Только чтение" : ""}`;
     renderRecords(page);
     saveFlowView("wb", {connection,kind,offset,search,stage,status,warehouse});
