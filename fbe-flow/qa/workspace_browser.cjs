@@ -65,7 +65,7 @@ async function main() {
     await page.locator("#commerce-records tr").first().waitFor();
     await page.locator('#commerce-search [name="stage"]').selectOption("shipping");
     await page.locator('#commerce-search [type="submit"]').click();
-    await page.locator("#commerce-records").getByText("QA-100-1", { exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelectorAll("#commerce-records tr").length === 1 && document.getElementById("commerce-records").textContent.includes("QA-100-1"));
     assert.equal(await page.locator("#commerce-records tr").count(), 1);
     await page.goto(seller + "/settings?tab=integrations");
     const ozonCard = page.locator(".integration-card").filter({ has: page.locator('[data-connection="' + meta.ozon + '"]') });
