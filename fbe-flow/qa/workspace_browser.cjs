@@ -97,7 +97,9 @@ async function main() {
     const popupEvent = page.waitForEvent("popup"); await page.locator("#print-test-link").click();
     const popup = await popupEvent; await popup.waitForLoadState();
     assert.equal(await popup.locator(".test-label").count(), 1); await popup.close();
-    await page.goto(seller + "/sales?channel=kit"); await page.locator("#commerce-records").getByText("KIT-2001", { exact: true }).waitFor();
+    await page.goto(seller + "/sales?channel=kit");
+    await page.locator("#commerce-records tr").filter({ hasText: "#KIT-2001" }).waitFor();
+    assert.equal(await page.locator("#commerce-records tr").count(), 1);
     await page.getByRole("link", { name: "Мой магазин", exact: true }).waitFor();
     await page.goto(seller + "/marking");
     await page.locator('#chz-catalog-pick [name="search"]').fill("001");
