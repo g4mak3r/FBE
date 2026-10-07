@@ -54,6 +54,8 @@ async function main() {
     await page.locator('[data-widget="assembly"] .widget-link').click();
     await page.locator("#wb-records tr").filter({ hasText: "#101" }).waitFor();
     assert.equal(await page.locator("#wb-records tr").count(), 1);
+    assert.ok((await page.locator("#wb-records").textContent()).includes("Основной WB"));
+    await page.waitForFunction(() => document.getElementById("wb-supply-select").options.length > 1);
     await page.getByRole("button", { name: "#101", exact: true }).click();
     await page.locator("#wb-order-dialog .action-context").getByText(/Проверка ассортимента/).waitFor();
     await page.locator("#wb-order-dialog .wb-close").click();

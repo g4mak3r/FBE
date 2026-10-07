@@ -21,8 +21,8 @@
   const filterForm = document.getElementById("wb-search");
   for (const key of ["search", "stage", "status"]) filterForm.elements[key].value = ({search,stage,status})[key];
   async function loadWarehouseFilter() {
-    const active = connection, page = await api(base() + "/records/warehouses?limit=200");
-    if (active !== connection) return;
+    const active = connection, version = revision, page = await api(base() + "/records/warehouses?limit=200");
+    if (active !== connection || version !== revision) return;
     warehouseNames = new Map(page.items.map(v => [v.external_id, v.name]));
     const field = filterForm.elements.warehouse, prompt = make("option", "Все склады"); prompt.value = "";
     field.replaceChildren(prompt, ...page.items.map(v => { const option = make("option", v.name); option.value = v.external_id; return option; }));
@@ -186,7 +186,7 @@
   }
   function selectSupply(item) {
     const select = document.getElementById("wb-supply-select");
-    if (![...select.options].some(v => v.value === item.id)) { const option = make("option", `${item.attributes.source.name || item.external_id} · ${item.external_id}`); option.value = item.id; select.append(option); }
+    if (![...select.options].some(v => v.value === item.id)) { const option = make("option", `${item.attributes.source?.name || item.external_id} · ${item.external_id}`); option.value = item.id; select.append(option); }
     select.value = item.id;
   }
   async function refresh() {
@@ -211,7 +211,7 @@
     document.getElementById("wb-actions").replaceChildren(...actions.map(action => { const row = make("article", undefined, "connection"); row.append(clickButton(`${actionNames[action.kind]} · ${actionStates[action.state] || action.state}`, () => openAction(action.id))); row.append(make("small", new Date(action.created_at).toLocaleString("ru-RU"))); return row; }));
     const select = document.getElementById("wb-supply-select"), previous = select.value, old = [...select.options].find(v => v.value === previous);
     const placeholder = make("option", "Выберите поставку (другие — в разделе «Поставки»)"); placeholder.value = "";
-    select.replaceChildren(placeholder, ...supplies.items.filter(v => v.status === "open").map(v => { const option = make("option", `${v.attributes.source.name || v.external_id} · ${v.external_id}`); option.value = v.id; return option; }));
+    select.replaceChildren(placeholder, ...supplies.items.filter(v => v.status === "open").map(v => { const option = make("option", `${v.attributes.source?.name || v.external_id} · ${v.external_id}`); option.value = v.id; return option; }));
     if (old && ![...select.options].some(v => v.value === previous)) select.append(old);
     select.value = previous;
     if (currentAction && document.getElementById("wb-action-dialog").open) {
@@ -294,10 +294,18 @@
   }
   for (const [id, delta] of [["wb-codes-prev", -100], ["wb-codes-next", 100]]) document.getElementById(id).addEventListener("click", async () => { codeOffset = Math.max(0, codeOffset + delta); try { await loadCodes(); } catch (error) { showError(error); } });
   bindForm("wb-codes-form", () => prepare("sgtin", { order_id: currentOrder.id, code_ids: [...selectedCodes] }));
-  selector.addEventListener("change", () => { connection = selector.value; revision++; selected.clear(); selectedCodes.clear(); closeDialogs(); offset = 0; links = []; refresh().catch(showError); });
+  selector.addEventListener("change", async () => {
+    connection = selector.value; const version = ++revision;
+    warehouse = ""; warehouseNames.clear(); parameters = {read_only: true};
+    selected.clear(); selectedCodes.clear(); closeDialogs(); offset = 0; links = []; selectionCount();
+    document.querySelector('#wb-create-supply [type="submit"]').disabled = true;
+    const row = make("tr"), cell = make("td", "Загружаем задания аккаунта…"); cell.colSpan = 5; row.append(cell);
+    document.getElementById("wb-records").replaceChildren(row);
+    try { await loadWarehouseFilter(); if (version === revision) await refresh(); }
+    catch (error) { if (version === revision) showError(error); }
+  });
   async function poll() { try { await refresh(); } catch (error) { showError(error); } window.setTimeout(poll, refreshSeconds * 1000); }
   document.querySelectorAll("#wb-tabs button").forEach(v => v.classList.toggle("secondary", v.dataset.kind !== kind));
   if (pageQuery.get("history") === "1") document.getElementById("wb-history").open = true;
-  loadWarehouseFilter().catch(showError);
-  poll();
+  loadWarehouseFilter().then(poll).catch(error => { showError(error); poll(); });
 })();

@@ -63,10 +63,12 @@
       if (widget.kind !== "documents") row.append(select(channels, widget.channel, "Канал виджета", value => { widget.channel = value; widget.warehouse_id = ""; widget.status = ""; renderDraft(); }));
       if (["assembly", "shipping"].includes(widget.kind)) {
         const warehouses = data.warehouses.filter(w => widget.channel === "all" || widget.channel === w.adapter_key);
-        row.append(select([["", "Все склады"], ...warehouses.map(w => [w.id, w.name + " · " + names[w.adapter_key]])], widget.warehouse_id, "Склад виджета", value => { widget.warehouse_id = value; }));
-        const states = Object.entries(data.stage_statuses[widget.kind]).filter(([key]) => widget.channel === "all" || key === widget.channel).flatMap(([key, values]) => values.map(v => [v.value, v.label + (widget.channel === "all" ? " · " + names[key] : "")]));
+        row.append(select([["", "Все склады"], ...warehouses.map(w => [w.id, w.name + " · " + names[w.adapter_key]])], widget.warehouse_id, "Склад виджета", value => { widget.warehouse_id = value; widget.status = ""; renderDraft(); }));
+        const statusChannel = widget.channel === "all" ? warehouses.find(w => w.id === widget.warehouse_id)?.adapter_key : widget.channel;
+        const states = Object.entries(data.stage_statuses[widget.kind]).filter(([key]) => key === statusChannel).flatMap(([key, values]) => values.map(v => [v.value, v.label + (widget.channel === "all" ? " · " + names[key] : "")]));
         if (widget.status && !states.some(v => v[0] === widget.status)) states.push([widget.status, widget.status]);
-        row.append(select([["", "Все статусы выбранного этапа"], ...states], widget.status, "Статус виджета", value => { widget.status = value; }));
+        const statusSelect = select([["", "Все статусы выбранного этапа"], ...states], widget.status, "Статус виджета", value => { widget.status = value; });
+        statusSelect.disabled = !statusChannel; row.append(statusSelect);
       }
       const actions = node("div", undefined, "actions");
       const up = button("Выше", () => { [draft[index - 1], draft[index]] = [draft[index], draft[index - 1]]; renderDraft(); }); up.disabled = index === 0;

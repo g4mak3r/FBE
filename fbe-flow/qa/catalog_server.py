@@ -58,12 +58,21 @@ class BrowserWb(FixtureAdapter):
         return variants(record, "wb")
 
 
+class BrowserOzonTransport(SchemaTransport):
+    def request(self, method, url, *, params=None, headers=None, body=None):
+        path = urlparse(url).path
+        if path == "/v1/roles":
+            return fixture_reply({"roles": [{"name": "Admin"}]})
+        if path == "/v1/seller/info":
+            return fixture_reply({"company": {"inn": "123456789012", "name": "QA seller"}})
+        return super().request(method, url, params=params, headers=headers, body=body)
+
+
 def main():
     target = Path(sys.argv[1])
     with TemporaryDirectory(prefix="fbe-catalog-qa-") as directory:
         vault, signer, provider = MemoryVault(), FixtureSigner(), BrowserProvider()
-        ozon = OzonAdapter(vault, SchemaTransport(), pause=lambda _: None)
-        ozon.account = lambda _: {"account_id": "100", "tin": provider.inn}
+        ozon = OzonAdapter(vault, BrowserOzonTransport(), pause=lambda _: None)
         app = create_app(
             AppConfig(Path(directory), worker_enabled=False),
             [
@@ -169,7 +178,12 @@ def main():
             NormalizedBatch(
                 warehouses=(Warehouse(external_id="wb-main", name="Основной WB"),),
                 supplies=(
-                    Supply(external_id="WB-QA-1", status="open", warehouse_external_id="wb-main"),
+                    Supply(
+                        external_id="WB-QA-1",
+                        status="open",
+                        warehouse_external_id="wb-main",
+                        attributes={"source": {"name": "Поставка QA"}},
+                    ),
                 ),
                 orders=tuple(
                     Order(
@@ -221,10 +235,15 @@ def main():
         )
         with state.database.connection() as conn:
             state.fulfillment.snapshot(conn, seller, wb["id"], "last_sync", {"counts": {}})
+            state.fulfillment.snapshot(conn, seller, wb["id"], "sync", {"state": "complete"})
             state.commerce.snapshot(
                 conn, seller, ozon_connection["id"], "last_sync", {"counts": {}}
             )
             state.commerce.snapshot(conn, seller, kit["id"], "last_sync", {"counts": {}})
+            for connection in (ozon_connection, kit):
+                state.commerce.snapshot(
+                    conn, seller, connection["id"], "sync", {"state": "complete"}
+                )
         initial = state.catalog.save_product(seller, data())
         code_id = str(uuid4())
         with state.database.connection() as conn:
