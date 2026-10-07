@@ -56,6 +56,10 @@ async function main() {
     assert.equal(await page.locator("#wb-records tr").count(), 1);
     assert.ok((await page.locator("#wb-records").textContent()).includes("Основной WB"));
     await page.waitForFunction(() => document.getElementById("wb-supply-select").options.length > 1);
+    await page.locator("#wb-search .filter-menu > summary").click();
+    assert.equal(await page.locator('#wb-search [name="warehouse"]').inputValue(), wbWarehouse.external_id);
+    assert.equal(await page.locator('#wb-search [name="status"]').inputValue(), "new");
+    await page.locator("#wb-search .filter-menu > summary").click();
     await page.getByRole("button", { name: "#101", exact: true }).click();
     await page.locator("#wb-order-dialog .action-context").getByText(/Проверка ассортимента/).waitFor();
     await page.locator("#wb-order-dialog .wb-close").click();
@@ -70,6 +74,10 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll("#commerce-records tr").length === 1 && document.getElementById("commerce-records").textContent.includes("QA-100-1"));
     assert.equal(await page.locator("#commerce-records tr").count(), 1);
     await page.goto(seller + "/settings?tab=integrations");
+    await page.getByRole("button", { name: "Добавить подключение", exact: true }).click();
+    await page.locator("#integration-dialog summary").filter({ hasText: "Wildberries" }).click();
+    await page.locator("#settings-connect-wb").waitFor({state: "visible"});
+    await page.locator("#integration-dialog [data-ui-close]").click();
     const ozonCard = page.locator(".integration-card").filter({ has: page.locator('[data-connection="' + meta.ozon + '"]') });
     await ozonCard.locator("summary").first().click();
     await ozonCard.getByRole("button", { name: "Проверить доступ", exact: true }).click();
@@ -79,6 +87,7 @@ async function main() {
     await ozonCard.getByText("Доступ обновлен", { exact: true }).waitFor();
     await page.locator('#store-name-form [name="name"]').fill("Мой магазин");
     await Promise.all([page.waitForEvent("load"), page.locator('#store-name-form [type="submit"]').click()]);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await shot("settings-desktop");
     await page.goto(seller + "/settings?tab=application");
     await page.locator('#application-form [name="operator"]').fill("Оператор QA");
@@ -102,6 +111,15 @@ async function main() {
     assert.equal(await page.locator("#commerce-records tr").count(), 1);
     await page.getByRole("link", { name: "Мой магазин", exact: true }).waitFor();
     await page.goto(seller + "/marking");
+    await page.locator("#chz-codes tr").first().waitFor();
+    await shot("marking-codes-desktop");
+    await page.getByRole("button", { name: "Заказать коды", exact: true }).click();
+    await page.locator('#chz-order [name="catalog_gtin"]').waitFor({state: "visible"});
+    await page.locator("#chz-tools-dialog [data-ui-close]").click();
+    await page.getByRole("button", { name: "Проверить коды", exact: true }).click();
+    await page.locator('#chz-check-codes [name="codes"]').waitFor({state: "visible"});
+    await page.locator("#chz-check-dialog [data-ui-close]").click();
+    await page.locator(".catalog-context > summary").click();
     await page.locator('#chz-catalog-pick [name="search"]').fill("001");
     await page.locator('#chz-catalog-pick [type="submit"]').click();
     await page.waitForFunction(() => document.getElementById("chz-catalog-product").options.length > 1);

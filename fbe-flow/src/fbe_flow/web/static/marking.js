@@ -291,6 +291,7 @@
     if (!values.length) document.getElementById("chz-documents").append(make("p", "Подготовленных документов ещё нет.", "muted"));
   }
   function renderDocument(value) {
+    document.querySelectorAll("dialog[data-workflow-tools][open]").forEach(dialog => dialog.close());
     actionContext(document.getElementById("chz-document"), select.selectedOptions[0].textContent, parameters.inn);
     const previous = activeDocument?.id; activeDocument = value;
     document.getElementById("chz-document-title").textContent = value.title;

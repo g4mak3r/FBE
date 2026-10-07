@@ -1,6 +1,5 @@
 <div id="catalog-root">
-  <p class="muted">Единый ассортимент продавца. Карточки площадок, документы и партии связаны с конкретными товарными вариантами.</p>
-  <div class="actions catalog-tabs" role="tablist" aria-label="Разделы ассортимента">
+  <div class="actions catalog-tabs section-tabs" role="tablist" aria-label="Разделы ассортимента">
     <button type="button" role="tab" data-catalog-tab="products" aria-selected="true">Товары</button>
     <button type="button" role="tab" data-catalog-tab="sources" aria-selected="false" class="secondary">Карточки площадок</button>
     <button type="button" role="tab" data-catalog-tab="exchange" aria-selected="false" class="secondary">Обмен XLSX</button>
@@ -8,7 +7,7 @@
   </div>
   <p id="catalog-stats" class="muted" aria-live="polite"></p>
   <section class="panel" data-catalog-panel="products" role="tabpanel">
-    <div class="actions"><button type="button" id="catalog-new">Добавить товар</button><button type="button" id="catalog-export-selected" class="secondary">Выгрузить выбранные</button><a id="catalog-export-all" class="chz-link" href="/api/sellers/{{ seller.id }}/catalog/xlsx/export">Выгрузить всю базу XLSX</a></div>
+    <div class="catalog-list-actions"><button type="button" id="catalog-new">Добавить товар</button><details class="action-menu"><summary>Экспорт XLSX</summary><div class="menu-items"><button type="button" id="catalog-export-selected" class="secondary">Выгрузить выбранные</button><a id="catalog-export-all" class="text-link" href="/api/sellers/{{ seller.id }}/catalog/xlsx/export">Выгрузить всю базу XLSX</a></div></details></div>
     <form id="catalog-search" class="catalog-filter"><label>Поиск<input name="search" placeholder="Название, артикул, GTIN"></label><label>Состояние<select name="archived"><option value="false">Активные</option><option value="true">Архив</option></select></label><button type="submit" class="secondary">Найти</button></form>
     <div class="table-wrap"><table><thead><tr><th><input type="checkbox" id="catalog-select-page" aria-label="Выбрать страницу"></th><th>Товар</th><th>Артикул</th><th>GTIN</th><th>ТН ВЭД / группа ЧЗ</th><th>Действие</th></tr></thead><tbody id="catalog-products"></tbody></table></div>
     <div class="actions"><button type="button" id="catalog-prev" class="secondary">Назад</button><span id="catalog-page"></span><button type="button" id="catalog-next" class="secondary">Далее</button><span id="catalog-selection"></span></div>

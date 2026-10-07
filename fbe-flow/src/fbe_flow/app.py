@@ -106,7 +106,7 @@ def create_app(
                 if config.worker_enabled:
                     await asyncio.to_thread(worker.stop)
 
-    app = FastAPI(title="FBE Flow", version="0.8.0", lifespan=lifespan)
+    app = FastAPI(title="FBE Flow", version="0.8.1", lifespan=lifespan)
     app.state.config = config
     app.state.registry = registry
     app.state.database = database

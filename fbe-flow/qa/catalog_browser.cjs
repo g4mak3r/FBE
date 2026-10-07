@@ -35,7 +35,7 @@ async function main() {
     }
     await page.goto(root + "/sellers/" + meta.seller + "/catalog");
     await page.locator("#catalog-products tr").first().waitFor();
-    await checkLayout();
+    await checkLayout(); await screenshot("catalog-desktop-list");
     await page.locator("#catalog-new").click();
     const productForm = page.locator("#catalog-product-form");
     await productForm.locator('[name="title"]').fill('Товар <img src=x onerror=alert(1)>');
@@ -110,6 +110,7 @@ async function main() {
     await page.locator("#catalog-check").click();
     await page.locator("#catalog-check-result").getByText("Соответствие подтверждено по проверенным данным", { exact: true }).waitFor();
     await page.locator('[data-close="catalog-product-dialog"]').click();
+    await page.locator(".catalog-list-actions summary").click();
     const dl = page.waitForEvent("download");
     await page.locator("#catalog-export-all").click();
     const downloaded = await dl, sourceFile = path.join(temporary, "export.xlsx"), changedFile = path.join(temporary, "changed.xlsx");

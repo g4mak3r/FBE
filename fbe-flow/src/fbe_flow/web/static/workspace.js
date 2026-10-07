@@ -13,19 +13,26 @@
     s.value = current; s.addEventListener("change", () => changed(s.value)); return s;
   };
   function render() {
+    const openSources = new Set([...root.querySelectorAll("details[open]")].map(item => item.dataset.sourceKey));
+    const active = document.activeElement, focusedSource = active?.closest("[data-source-key]")?.dataset.sourceKey;
     const widgets = data.widgets.map(widget => {
       const card = node("section", undefined, "panel workspace-widget"); card.dataset.widget = widget.id;
       card.append(node("h2", widget.title));
       if (widget.message) card.append(node("p", widget.message, "inline-error"));
-      for (const row of widget.rows) {
+      for (const [index, row] of widget.rows.entries()) {
         const article = node("article", undefined, "widget-row");
         const link = node("a", row.name, "widget-link"); link.href = row.href;
         if (row.count !== undefined) link.append(node("strong", row.count === null ? "—" : row.count, "widget-count"));
         article.append(link);
-        if (row.hint) article.append(node("small", row.hint, "muted"));
+        if (row.hint && row.hint !== "Заказы") article.append(node("small", row.hint, "muted"));
+        const source = node("details", undefined, "widget-source");
+        source.dataset.sourceKey = widget.id + ":" + index; source.open = openSources.has(source.dataset.sourceKey);
+        const timestamp = row.updated_at ? new Date(row.updated_at).toLocaleString("ru-RU", {day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"}) : "";
+        const summary = node("summary", row.freshness === "complete" ? "Обновлено " + timestamp : row.freshness ? freshness[row.freshness] : "Подробнее");
+        if (["error", "stale", "never"].includes(row.freshness)) summary.className = "widget-warning";
+        source.append(summary);
         if (row.freshness) {
-          const status = node("small", freshness[row.freshness], ["error", "stale"].includes(row.freshness) ? "widget-warning" : "muted"); article.append(status);
-          if (row.updated_at) article.append(node("small", new Date(row.updated_at).toLocaleString("ru-RU"), "muted"));
+          if (timestamp && row.freshness !== "complete") source.append(node("small", "Последние данные: " + timestamp));
           const controls = node("div", undefined, "actions");
           const refresh = button("Обновить " + names[row.channel], async event => {
             const b = event.currentTarget; b.disabled = true;
@@ -34,21 +41,23 @@
               await api(endpoint + "/sync", "POST", {}); showSuccess("Обновление " + names[row.channel] + " запущено"); await load();
             } catch (error) { showError(error); } finally { if (b.isConnected) b.disabled = false; }
           });
-          refresh.disabled = row.freshness === "updating"; controls.append(refresh); article.append(controls);
+          refresh.disabled = row.freshness === "updating"; controls.append(refresh); source.append(controls);
         }
         if (row.examples?.length) {
           const list = node("ul", undefined, "widget-examples");
           for (const example of row.examples) { const li = node("li", example.number); if (example.deadline) li.append(node("small", " · " + example.deadline)); list.append(li); }
-          article.append(list);
+          source.append(list);
         }
+        if (row.freshness || row.examples?.length) article.append(source);
         card.append(article);
       }
-      if (!widget.rows.length && !widget.message) card.append(node("p", widget.kind === "attention" ? "По сохраненным данным нет задач, требующих внимания." : widget.kind === "documents" ? "Нет документов с истекающим сроком в ближайшие 30 дней." : widget.kind === "codes" ? "Сохраненных кодов пока нет." : "Нет подключенного канала для этого виджета.", "muted"));
+      if (!widget.rows.length && !widget.message) card.append(node("p", widget.kind === "attention" ? "По сохраненным данным все спокойно." : widget.kind === "documents" ? "Нет истекающих документов." : widget.kind === "codes" ? "Кодов пока нет." : "Подключите канал в настройках.", "muted"));
       return card;
     });
-    if (!widgets.length) widgets.push(node("p", "Добавьте виджеты через «Настроить пространство».", "muted"));
+    if (!widgets.length) widgets.push(node("p", "Добавьте нужные виджеты кнопкой «Виджеты».", "muted"));
     root.replaceChildren(...widgets);
-    document.getElementById("workspace-updated").textContent = "Сводка: " + new Date(data.generated_at).toLocaleTimeString("ru-RU");
+    if (focusedSource) [...root.querySelectorAll("[data-source-key]")].find(item => item.dataset.sourceKey === focusedSource)?.querySelector(active.tagName === "BUTTON" ? "button" : "summary")?.focus({preventScroll: true});
+    document.getElementById("workspace-updated").textContent = "На " + new Date(data.generated_at).toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
   }
   async function load() {
     if (refreshing) return; refreshing = true;

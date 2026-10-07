@@ -25,8 +25,8 @@
       let body = Object.fromEntries(fields);
       let endpoint = sellerApi + (key === "chz" ? "/marking" : key === "wb" ? "/wb" : "/commerce");
       if (["ozon", "kit"].includes(key)) body = {...body, adapter_key: key, read_only: fields.has("read_only")};
-      await api(endpoint + "/connections", "POST", body);
-      form.reset(); location.reload();
+      const connection = await api(endpoint + "/connections", "POST", body);
+      form.reset(); location.assign("/sellers/" + encodeURIComponent(sellerId) + "/settings?tab=integrations&connection=" + encodeURIComponent(connection.id));
     });
   }
   const cardMessage = (card, text, bad = false) => {

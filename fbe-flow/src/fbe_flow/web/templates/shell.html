@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', path='/shell.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='/workspace.css') }}">
   <script defer src="{{ url_for('static', path='/shell.js') }}"></script>
+  <script defer src="{{ url_for('static', path='/interface.js') }}"></script>
   {% if page == 'overview' %}<script defer src="{{ url_for('static', path='/workspace.js') }}"></script>{% endif %}
   {% if page == 'settings' %}<script defer src="{{ url_for('static', path='/settings.js') }}"></script>{% endif %}
   {% if page == 'catalog' %}<script defer src="{{ url_for('static', path='/catalog.js') }}"></script>{% endif %}
@@ -18,11 +19,12 @@
   <a href="#main-content" class="skip-link">К содержимому</a>
   <aside class="sidebar">
     <div class="sidebar-brand"><a class="brand" href="/">FBE <span>Flow</span></a><button id="navigation-toggle" class="secondary mobile-menu" type="button" aria-expanded="false" aria-controls="primary-navigation">Меню</button></div>
+    {% set nav_icons = {'overview':'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z','catalog':'m12 3 9 5v8l-9 5-9-5V8z M3 8l9 5 9-5 M12 13v8','sales':'M4 5h16v15H4z M8 5V3h8v2 M8 10h8 M8 14h5','marking':'M8 3H3v5 M16 3h5v5 M21 16v5h-5 M8 21H3v-5 M7 8v8 M11 8v8 M15 8v8 M18 8v8'} %}
     <nav id="primary-navigation" aria-label="Основная навигация">
       {% for key,label in [('overview','Рабочее пространство'),('catalog','Ассортимент'),('sales','Продажи'),('marking','Честный Знак')] %}
-      {% if seller %}<a href="/sellers/{{ seller.id }}/{{ key }}" {% if page == key %}aria-current="page"{% endif %}>{{ label }}</a>{% else %}<span class="disabled">{{ label }}</span>{% endif %}
+      {% if seller %}<a href="/sellers/{{ seller.id }}/{{ key }}" {% if page == key %}aria-current="page"{% endif %}><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ nav_icons[key] }}"/></svg><span>{{ label }}</span></a>{% else %}<span class="disabled">{{ label }}</span>{% endif %}
       {% endfor %}
-      {% if seller %}<a class="settings-navigation" href="/sellers/{{ seller.id }}/settings" {% if page == 'settings' %}aria-current="page"{% endif %}>Настройки</a>{% endif %}
+      {% if seller %}<a class="settings-navigation" href="/sellers/{{ seller.id }}/settings" {% if page == 'settings' %}aria-current="page"{% endif %}><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M4 17h16 M8 4v6 M16 14v6"/></svg><span>Настройки</span></a>{% endif %}
     </nav>
   </aside>
   <main id="main-content">
