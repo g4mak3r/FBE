@@ -22,8 +22,14 @@
   });
   const selector = document.getElementById("commerce-connection");
   if (!selector) return;
+  const view = flowView(adapter);
+  if ([...selector.options].some(v => v.value === view.connection)) selector.value = view.connection;
   let connection = selector.value, revision = 0, refreshSequence = 0;
-  let kind = "orders", offset = 0, search = "", status = "", readOnly = false;
+  let kind = ["orders", "products", "warehouses", "supplies", "returns"].includes(view.kind) && (adapter === "ozon" || !["supplies", "returns"].includes(view.kind)) ? view.kind : "orders";
+  let offset = Math.max(0, Number(view.offset) || 0), search = view.search || "", status = view.status || "", readOnly = false;
+  let stage = view.stage || "", warehouse = view.warehouse || "";
+  const filterForm = document.getElementById("commerce-search");
+  filterForm.elements.search.value = search; filterForm.elements.stage.value = stage;
   let links = [], currentAction = null, codeOrder = null, codeItem = null;
   let product = null, nkOffset = 0, nkPage = [], codeOffset = 0, tin = "";
   let cancelOrder = null, bulkKind = null;
@@ -51,6 +57,7 @@
   }
   document.querySelectorAll(".commerce-close").forEach(v => v.addEventListener("click", () => v.closest("dialog").close()));
   function renderAction(action) {
+    actionContext(document.getElementById("commerce-action-dialog"), selector.selectedOptions[0].textContent, tin);
     currentAction = action;
     document.getElementById("commerce-action-title").textContent = names[action.kind];
     document.getElementById("commerce-action-status").textContent = (states[action.state] || action.state) + (action.error_code ? " · " + action.error_code : "");
@@ -101,6 +108,7 @@
     const labels = {orders: ["Заказ", "Статус / оплата", "Состав", "Действия"], products: ["Товар", "Цена / остатки", "ЧЗ / действия"], warehouses: ["Склад", "ID", "Статус"], supplies: ["Отгрузка", "Статус", "Состав"], returns: ["Возврат", "Товар", "Состояние"]};
     const header = make("tr"); header.append(...labels[kind].map(v => make("th", v)));
     document.getElementById("commerce-head").replaceChildren(header);
+    const scroll = {x: window.scrollX, y: window.scrollY};
     const rows = page.items.map(item => {
       const row = make("tr"), source = item.attributes?.source || {};
       if (kind === "orders") {
@@ -130,6 +138,7 @@
     });
     if (!rows.length) { const row = make("tr"), cell = make("td", "Данных пока нет. Обновите интеграцию или измените поиск."); cell.colSpan = labels[kind].length; row.append(cell); rows.push(row); }
     document.getElementById("commerce-records").replaceChildren(...rows);
+    window.scrollTo(scroll.x, scroll.y);
     document.getElementById("commerce-count").textContent = page.total ? String(offset + 1) + "–" + String(offset + page.items.length) + " из " + page.total : "0 записей";
     document.getElementById("commerce-prev").disabled = offset === 0;
     document.getElementById("commerce-next").disabled = offset + page.items.length >= page.total;
@@ -268,25 +277,26 @@
     document.getElementById("commerce-token").reset();
     if (version === revision) await refresh();
   });
-  document.getElementById("commerce-sync").addEventListener("click", async () => {
-    try { await api(base() + "/sync", "POST", {}); await refresh(); } catch (error) { showError(error); }
+  document.getElementById("commerce-sync").addEventListener("click", async event => {
+    const button = event.currentTarget; button.disabled = true;
+    try { await api(base() + "/sync", "POST", {}); await refresh(); } catch (error) { showError(error); button.disabled = false; }
   });
   for (const node of document.querySelectorAll("#commerce-tabs [data-kind]")) node.addEventListener("click", () => {
-    kind = node.dataset.kind; offset = 0; revision++;
+    kind = node.dataset.kind; offset = 0; stage = ""; status = ""; warehouse = ""; filterForm.elements.stage.value = ""; filterForm.elements.status.value = ""; filterForm.elements.warehouse.value = ""; revision++;
     document.querySelectorAll("#commerce-tabs button").forEach(v => v.classList.toggle("secondary", v !== node));
     refresh().catch(showError);
   });
-  bindForm("commerce-search", fields => { search = fields.get("search"); status = fields.get("status"); offset = 0; revision++; return refresh(); });
+  bindForm("commerce-search", fields => { search = fields.get("search"); status = fields.get("status"); stage = fields.get("stage"); warehouse = fields.get("warehouse"); if (stage) kind = "orders"; if (!["orders", "supplies"].includes(kind)) { stage = ""; status = ""; warehouse = ""; } offset = 0; revision++; return refresh(); });
   for (const [id, delta] of [["commerce-prev", -100], ["commerce-next", 100]]) document.getElementById(id).addEventListener("click", () => { offset = Math.max(0, offset + delta); revision++; refresh().catch(showError); });
-  selector.addEventListener("change", () => { connection = selector.value; revision++; offset = 0; selectedCodes.clear(); links = []; closeDialogs(); refresh().catch(showError); });
+  selector.addEventListener("change", () => { connection = selector.value; revision++; offset = 0; warehouse = ""; loadWarehouseFilter().catch(showError); selectedCodes.clear(); links = []; closeDialogs(); refresh().catch(showError); });
   async function refresh() {
     const version = revision, sequence = ++refreshSequence, path = base();
-    const [overview, records, linked, actions] = await Promise.all([api(path + "/overview"), api(path + "/records/" + kind + "?offset=" + offset + "&search=" + encodeURIComponent(search) + "&status=" + encodeURIComponent(status)), api(path + "/links"), api(path + "/actions")]);
+    const [overview, records, linked, actions] = await Promise.all([api(path + "/overview"), api(path + "/records/" + kind + "?offset=" + offset + "&search=" + encodeURIComponent(search) + "&status=" + encodeURIComponent(status) + "&stage=" + encodeURIComponent(stage) + "&warehouse=" + encodeURIComponent(warehouse)), api(path + "/links"), api(path + "/actions")]);
     if (version !== revision || sequence !== refreshSequence) return;
     readOnly = overview.parameters.read_only; tin = overview.parameters.tin; links = linked;
     const sync = overview.snapshots.sync?.value, last = overview.snapshots.last_sync;
     document.getElementById("commerce-sync-status").textContent = sync ? ({queued: "В очереди", running: "Обновляется", succeeded: "Обновлено", failed: "Ошибка чтения", interrupted: "Чтение прервано"}[sync.state] || sync.state) + " · " + (sync.coverage === "complete" ? "Полное чтение" : "Данные прочитаны частично") : "Еще не обновлялось";
-    document.getElementById("commerce-summary").textContent = "ИНН " + tin + " · " + (readOnly ? "Только чтение" : "Запись разрешена в FBE") + (last ? " · Последнее полное чтение: " + new Date(last.updated_at).toLocaleString("ru-RU") : "");
+    document.getElementById("commerce-summary").textContent = "Обновлено: " + (last ? new Date(last.updated_at).toLocaleString("ru-RU") : "еще не обновлялось") + (readOnly ? " · Только чтение" : "");
     document.getElementById("commerce-links").replaceChildren(...(links.length ? links.map(v => {
       const row = make("article", undefined, "connection");
       row.append(make("strong", v.product_title + " → " + v.chz_title), make("p", "GTIN " + v.gtin + " · " + v.product_group));
@@ -299,6 +309,8 @@
       return row;
     }) : [make("p", "Действий пока нет.", "muted")]));
     renderRecords(records);
+    saveFlowView(adapter, {connection,kind,offset,search,status,stage,warehouse});
+    document.getElementById("commerce-sync").disabled = ["queued", "running"].includes(sync?.state);
     if (currentAction && document.getElementById("commerce-action-dialog").open) {
       const action = await api(endpoint + "/actions/" + currentAction.id);
       if (version === revision && sequence === refreshSequence && currentAction?.id === action.id) renderAction(action);
@@ -306,7 +318,20 @@
   }
   async function poll() {
     try { await refresh(); } catch (error) { showError(error); }
-    window.setTimeout(poll, 4000);
+    window.setTimeout(poll, refreshSeconds * 1000);
   }
+  async function loadWarehouseFilter() {
+    const active = connection, page = await api(base() + "/records/warehouses?limit=200"); if (active !== connection) return;
+    const field = filterForm.elements.warehouse, prompt = option("Все склады", "");
+    field.replaceChildren(prompt, ...page.items.map(v => option(v.name, v.external_id)));
+    if (warehouse && ![...field.options].some(v => v.value === warehouse)) field.append(option("Склад " + warehouse, warehouse));
+    field.value = warehouse;
+  }
+  const allowedStates = adapter === "ozon" ? ["awaiting_packaging", "awaiting_deliver", "delivering", "delivered", "cancelled"] : Object.keys(orderStates).filter(v => v === v.toUpperCase());
+  filterForm.elements.status.replaceChildren(option("Все статусы", ""), ...allowedStates.map(v => option(orderStates[v], v)));
+  filterForm.elements.status.value = status;
+  document.querySelectorAll("#commerce-tabs button").forEach(v => v.classList.toggle("secondary", v.dataset.kind !== kind));
+  if (pageQuery.get("history") === "1") document.getElementById("commerce-history").open = true;
+  loadWarehouseFilter().catch(showError);
   poll();
 })();

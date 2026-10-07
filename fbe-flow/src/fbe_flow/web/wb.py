@@ -132,9 +132,12 @@ def records(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     search: Annotated[str, Query(max_length=150)] = "",
     supply: str | None = None,
+    stage: Annotated[str, Query(max_length=30)] = "",
+    status: Annotated[str, Query(max_length=100)] = "",
+    warehouse: Annotated[str, Query(max_length=120)] = "",
 ):
     return request.app.state.fulfillment.records(
-        seller_id, connection_id, kind, offset, limit, search, supply
+        seller_id, connection_id, kind, offset, limit, search, supply, stage, status, warehouse
     )
 
 

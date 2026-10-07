@@ -12,12 +12,14 @@ import uvicorn
 
 from fbe_flow.app import create_app
 from fbe_flow.config import AppConfig
-from fbe_flow.core.models import AccountInfo, NormalizedBatch, Product
+from fbe_flow.core.models import AccountInfo, NormalizedBatch, Order, Product, Supply, Warehouse
 from fbe_flow.integrations.catalog import variants
 from fbe_flow.integrations.chz.adapter import ChzAdapter
+from fbe_flow.integrations.kit import KitAdapter
 from fbe_flow.integrations.ozon.adapter import OzonAdapter
 from fbe_flow.integrations.wb.adapter import WbAdapter
 from tests.chz_fixtures import FixtureSigner, MemoryVault
+from tests.commerce_fixtures import KitProvider, uid
 from tests.conftest import FixtureAdapter
 from tests.test_catalog import data, gtin
 from tests.test_catalog_integrations import CatalogProvider, SchemaTransport, fixture_reply
@@ -64,7 +66,12 @@ def main():
         ozon.account = lambda _: {"account_id": "100", "tin": provider.inn}
         app = create_app(
             AppConfig(Path(directory), worker_enabled=False),
-            [ChzAdapter(vault, signer, provider), BrowserWb(), ozon],
+            [
+                ChzAdapter(vault, signer, provider),
+                BrowserWb(),
+                ozon,
+                KitAdapter(vault, KitProvider(), pause=lambda _: None),
+            ],
             vault=vault,
             signer=signer,
         )
@@ -145,6 +152,79 @@ def main():
                 )
             ),
         )
+        kit = state.connections.create(
+            seller,
+            "kit",
+            "Магазин — проверка",
+            {
+                "account_id": uid(8000),
+                "tin": provider.inn,
+                "read_only": True,
+                "credential_ref": vault.put(seller, {"kit_token": "qa-token"}),
+            },
+        )
+        state.records.apply(
+            seller,
+            wb["id"],
+            NormalizedBatch(
+                warehouses=(Warehouse(external_id="wb-main", name="Основной WB"),),
+                supplies=(
+                    Supply(external_id="WB-QA-1", status="open", warehouse_external_id="wb-main"),
+                ),
+                orders=tuple(
+                    Order(
+                        external_id=str(101 + n),
+                        status=status,
+                        warehouse_external_id="wb-main",
+                        attributes={
+                            "source": {
+                                "deliveryType": "fbs",
+                                "article": "WB001",
+                                "nmId": 100,
+                                "chrtId": 501,
+                                "warehouseId": "wb-main",
+                            }
+                        },
+                    )
+                    for n, status in enumerate(("new", "confirm", "cancel"))
+                ),
+            ),
+        )
+        state.records.apply(
+            seller,
+            ozon_connection["id"],
+            NormalizedBatch(
+                warehouses=(Warehouse(external_id="ozon-main", name="Основной Ozon"),),
+                orders=tuple(
+                    Order(
+                        external_id="QA-100-" + str(n),
+                        status=status,
+                        warehouse_external_id="ozon-main",
+                        attributes={"items": [], "source": {"posting_number": "QA-100-" + str(n)}},
+                    )
+                    for n, status in enumerate(("awaiting_packaging", "awaiting_deliver"))
+                ),
+            ),
+        )
+        state.records.apply(
+            seller,
+            kit["id"],
+            NormalizedBatch(
+                orders=(
+                    Order(
+                        external_id=uid(2001),
+                        status="NEW",
+                        attributes={"items": [], "source": {"order_number": "KIT-2001"}},
+                    ),
+                ),
+            ),
+        )
+        with state.database.connection() as conn:
+            state.fulfillment.snapshot(conn, seller, wb["id"], "last_sync", {"counts": {}})
+            state.commerce.snapshot(
+                conn, seller, ozon_connection["id"], "last_sync", {"counts": {}}
+            )
+            state.commerce.snapshot(conn, seller, kit["id"], "last_sync", {"counts": {}})
         initial = state.catalog.save_product(seller, data())
         code_id = str(uuid4())
         with state.database.connection() as conn:
@@ -169,6 +249,8 @@ def main():
                     "other": other,
                     "chz": chz["id"],
                     "ozon": ozon_connection["id"],
+                    "wb": wb["id"],
+                    "kit": kit["id"],
                     "initial": initial["id"],
                     "gtin": gtin(3),
                     "group": provider.group,

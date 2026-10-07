@@ -14,7 +14,21 @@
     window.location.reload();
   });
   if (!selector) return;
-  let connection = selector.value, revision = 0, kind = "orders", offset = 0, search = "";
+  const view = flowView("wb");
+  if ([...selector.options].some(v => v.value === view.connection)) selector.value = view.connection;
+  let connection = selector.value, revision = 0, kind = ["orders", "supplies", "products", "warehouses"].includes(view.kind) ? view.kind : "orders", offset = Math.max(0, Number(view.offset) || 0), search = view.search || "";
+  let stage = view.stage || "", status = view.status || "", warehouse = view.warehouse || "", warehouseNames = new Map();
+  const filterForm = document.getElementById("wb-search");
+  for (const key of ["search", "stage", "status"]) filterForm.elements[key].value = ({search,stage,status})[key];
+  async function loadWarehouseFilter() {
+    const active = connection, page = await api(base() + "/records/warehouses?limit=200");
+    if (active !== connection) return;
+    warehouseNames = new Map(page.items.map(v => [v.external_id, v.name]));
+    const field = filterForm.elements.warehouse, prompt = make("option", "Все склады"); prompt.value = "";
+    field.replaceChildren(prompt, ...page.items.map(v => { const option = make("option", v.name); option.value = v.external_id; return option; }));
+    if (warehouse && ![...field.options].some(v => v.value === warehouse)) { const option = make("option", "Склад " + warehouse); option.value = warehouse; field.append(option); }
+    field.value = warehouse;
+  }
   let links = [], parameters = {}, currentAction = null, product = null, currentOrder = null;
   let nkOffset = 0, nkPage = [], codeOffset = 0, refreshSequence = 0;
   const selected = new Map(), selectedCodes = new Set();
@@ -23,6 +37,26 @@
   const actionStates = { draft: "Подготовлено", queued: "В очереди", submitting: "Отправляется", accepted: "WB принял запрос", pending: "Ожидает подтверждения WB", confirmed: "Подтверждено WB", rejected: "Отклонено", unknown: "Ответ потерян — требуется сверка", conflict: "Результат расходится — требуется проверка", partial: "Часть заданий добавлена", cancelled: "Отменено" };
   const orderStates = { new: "Новое", confirm: "На сборке", complete: "В доставке", cancel: "Отменено" };
   const supplyStates = { open: "На сборке", closed: "Ожидает отгрузки", scanned: "Передано WB", deleted: "Удалено" };
+  function statusOptions(previewStage = stage, previewStatus = status) {
+    const states = previewStage === "shipping" || (!previewStage && kind === "supplies") ? supplyStates : orderStates;
+    const field = filterForm.elements.status, prompt = make("option", "Все статусы"); prompt.value = "";
+    field.replaceChildren(prompt, ...Object.entries(states).map(([value, label]) => { const option = make("option", label); option.value = value; return option; }));
+    field.value = Object.hasOwn(states, previewStatus) ? previewStatus : "";
+  }
+  filterForm.elements.stage.addEventListener("change", () => statusOptions(filterForm.elements.stage.value, ""));
+  function orderDetails(item) {
+    const source = item.attributes.source || {}, dialog = document.getElementById("wb-order-dialog");
+    actionContext(dialog, selector.selectedOptions[0].textContent, parameters.tin);
+    document.getElementById("wb-order-title").textContent = "Задание #" + item.external_id;
+    document.getElementById("wb-order-details").replaceChildren(...[
+      ["Товар", source.article || "Без артикула"], ["Статус", orderStates[item.status] || item.status],
+      ["Склад", warehouseNames.get(String(item.warehouse_external_id)) || item.warehouse_external_id || "Не указан"],
+      ["Поставка", item.supply_external_id || "Не назначена"], ["Создано", source.createdAt || "—"]
+    ].map(([label, value]) => make("p", label + ": " + value)));
+    document.getElementById("wb-order-source").textContent = JSON.stringify(item.attributes, null, 2);
+    dialog.showModal();
+  }
+  statusOptions();
   const syncPhases = { warehouses: "Склады", products: "Товары", supplies: "Поставки", orders: "История заданий", new: "Новые задания" };
   const closeDialogs = () => { document.querySelectorAll('dialog[id^="wb-"]').forEach(v => v.close()); currentAction = null; };
   document.querySelectorAll(".wb-close").forEach(button => button.addEventListener("click", () => button.closest("dialog").close()));
@@ -37,6 +71,7 @@
   }
   function selectionCount() {
     document.getElementById("wb-selection").textContent = `${selected.size} заданий выбрано`;
+    document.getElementById("wb-order-tools").hidden = kind !== "orders" || !selected.size;
     document.getElementById("wb-add-orders").disabled = !selected.size || !!parameters.read_only;
   }
   async function prepare(actionKind, payload) {
@@ -47,6 +82,7 @@
     await refresh();
   }
   function renderAction(action) {
+    actionContext(document.getElementById("wb-action-dialog"), selector.selectedOptions[0].textContent, parameters.tin);
     currentAction = action.id;
     document.getElementById("wb-action-title").textContent = actionNames[action.kind];
     document.getElementById("wb-action-status").textContent = `${actionStates[action.state] || action.state}${action.error_code ? ` · ${action.error_code}` : ""}`;
@@ -87,6 +123,7 @@
       orders: ["Выбрать", "Задание", "Статус", "Поставка / склад", "Коды ЧЗ"], supplies: ["Поставка", "Статус", "Действия"] };
     const head = make("tr"); head.append(...labels[kind].map(v => make("th", v)));
     document.getElementById("wb-head").replaceChildren(head);
+    const scroll = {x: window.scrollX, y: window.scrollY};
     const rows = page.items.map(item => {
       const row = make("tr"), source = item.attributes.source || {};
       if (kind === "products") {
@@ -95,14 +132,15 @@
         const action = make("td"); action.append(clickButton("Связать с ЧЗ", () => openLink(item)));
         row.append(title, identifiers, action);
       } else if (kind === "warehouses") {
-        row.append(make("td", item.name), make("td", item.external_id), make("td", JSON.stringify(source)));
+        row.append(make("td", item.name), make("td", item.external_id), make("td", "Wildberries"));
       } else if (kind === "orders") {
         const cell = make("td"), checkbox = make("input"); checkbox.type = "checkbox"; checkbox.checked = selected.has(item.id); checkbox.setAttribute("aria-label", `Выбрать задание ${item.external_id}`);
         checkbox.disabled = !["new", "confirm"].includes(item.status) || source.deliveryType !== "fbs";
+        if (checkbox.disabled) { selected.delete(item.id); checkbox.checked = false; } else if (selected.has(item.id)) selected.set(item.id, item);
         checkbox.addEventListener("change", () => { if (checkbox.checked) selected.set(item.id, item); else selected.delete(item.id); selectionCount(); }); cell.append(checkbox);
-        const title = make("td", `#${item.external_id}`); title.append(make("small", `${source.article || ""} · WB ${source.nmId} · chrtID ${source.chrtId}`));
+        const title = make("td"); title.append(clickButton(`#${item.external_id}`, () => orderDetails(item)), make("small", source.article || "Без артикула"));
         const status = make("td", orderStates[item.status] || item.status); status.append(make("small", `WB: ${item.attributes.wb_status || "—"}`));
-        const sourceCell = make("td", `${source.supplyId || "Без поставки"} · Склад ${source.warehouseId || "—"}`);
+        const sourceCell = make("td", item.supply_external_id || "Без поставки"); sourceCell.append(make("small", warehouseNames.get(String(item.warehouse_external_id)) || "Склад " + (item.warehouse_external_id || "—")));
         const marking = make("td", undefined, "wb-marking-cell");
         if (item.marking.length) for (const value of item.marking) marking.append(clickButton(value.code, () => openAction(value.action_id)));
         else {
@@ -139,10 +177,11 @@
     });
     if (!rows.length) { const row = make("tr"), cell = make("td", "Нет записей. Обновите WB или измените поиск."); cell.colSpan = labels[kind].length; row.append(cell); rows.push(row); }
     document.getElementById("wb-records").replaceChildren(...rows);
-    document.getElementById("wb-count").textContent = `${page.total} записей · ${offset + 1}–${offset + page.items.length}`;
+    window.scrollTo(scroll.x, scroll.y);
+    document.getElementById("wb-count").textContent = page.total ? `${offset + 1}–${offset + page.items.length} из ${page.total}` : "0 записей";
     document.getElementById("wb-prev").disabled = offset === 0;
     document.getElementById("wb-next").disabled = offset + page.items.length >= page.total;
-    document.getElementById("wb-order-tools").hidden = kind !== "orders";
+
     selectionCount();
   }
   function selectSupply(item) {
@@ -154,7 +193,7 @@
     const sequence = ++refreshSequence;
     const version = revision, endpoint = base(), activeKind = kind, activeOffset = offset, activeSearch = search;
     const [overview, page, newLinks, actions, supplies] = await Promise.all([
-      api(`${endpoint}/overview`), api(`${endpoint}/records/${activeKind}?offset=${activeOffset}&search=${encodeURIComponent(activeSearch)}`),
+      api(`${endpoint}/overview`), api(`${endpoint}/records/${activeKind}?offset=${activeOffset}&search=${encodeURIComponent(activeSearch)}&stage=${encodeURIComponent(stage)}&status=${encodeURIComponent(status)}&warehouse=${encodeURIComponent(warehouse)}`),
       api(`${endpoint}/links`), api(`${endpoint}/actions`), api(`${endpoint}/records/supplies?limit=200`),
     ]);
     if (sequence !== refreshSequence || version !== revision || activeKind !== kind || activeOffset !== offset || activeSearch !== search) return;
@@ -163,8 +202,9 @@
     const sync = overview.snapshots.sync?.value;
     document.getElementById("wb-sync").disabled = ["queued", "running"].includes(sync?.state);
     document.getElementById("wb-sync-status").textContent = sync ? `Синхронизация: ${states[sync.state] || sync.state} · ${syncPhases[sync.phase] || ""}${sync.error ? ` · ${sync.error}` : ""}` : "Ещё не синхронизировано";
-    document.getElementById("wb-summary").textContent = `ИНН ${parameters.tin} · ${parameters.read_only ? "Доступ только на чтение" : "Чтение и запись"} · ${overview.counts.products} товаров · ${overview.counts.orders} заданий · Обновление: ${overview.snapshots.last_sync ? new Date(overview.snapshots.last_sync.updated_at).toLocaleString("ru-RU") : "нет"}`;
+    document.getElementById("wb-summary").textContent = `Обновлено: ${overview.snapshots.last_sync ? new Date(overview.snapshots.last_sync.updated_at).toLocaleString("ru-RU") : "еще не обновлялось"}${parameters.read_only ? " · Только чтение" : ""}`;
     renderRecords(page);
+    saveFlowView("wb", {connection,kind,offset,search,stage,status,warehouse});
     const list = document.getElementById("wb-links");
     list.replaceChildren(...links.map(link => { const row = make("article", `${link.product_title} · chrtID ${link.chrt_id} → ${link.chz_title} · GTIN ${link.gtin} · ${link.product_group}`, "connection"); row.append(clickButton("Удалить связь", async () => { await api(`${endpoint}/links/${link.id}`, "DELETE", {}); if (version === revision) await refresh(); })); return row; }));
     if (!links.length) list.append(make("p", "Откройте «Товары» и свяжите нужный размер с карточкой НК.", "muted"));
@@ -180,14 +220,22 @@
     }
   }
   async function setKind(value) {
-    kind = value; offset = 0; search = ""; document.getElementById("wb-search").reset();
+    kind = value; offset = 0; search = ""; stage = ""; status = ""; warehouse = ""; filterForm.reset(); statusOptions(); selected.clear(); selectionCount(); revision++;
     document.querySelectorAll("#wb-tabs button").forEach(v => v.classList.toggle("secondary", v.dataset.kind !== kind));
     try { await refresh(); } catch (error) { showError(error); }
   }
   document.querySelectorAll("#wb-tabs button").forEach(button => button.addEventListener("click", () => setKind(button.dataset.kind)));
   document.getElementById("wb-prev").addEventListener("click", async () => { offset = Math.max(0, offset - 100); try { await refresh(); } catch (error) { showError(error); } });
   document.getElementById("wb-next").addEventListener("click", async () => { offset += 100; try { await refresh(); } catch (error) { showError(error); } });
-  bindForm("wb-search", async fields => { search = fields.get("search"); offset = 0; await refresh(); });
+  bindForm("wb-search", async fields => {
+    search = fields.get("search"); stage = fields.get("stage"); status = fields.get("status"); warehouse = fields.get("warehouse"); offset = 0; revision++;
+    if (stage === "shipping") kind = "supplies";
+    else if (stage) kind = "orders";
+    if (!["orders", "supplies"].includes(kind)) { stage = ""; status = ""; warehouse = ""; }
+    selected.clear(); selectionCount();
+    document.querySelectorAll("#wb-tabs button").forEach(v => v.classList.toggle("secondary", v.dataset.kind !== kind));
+    await refresh();
+  });
   document.getElementById("wb-sync").addEventListener("click", async event => { event.target.disabled = true; try { await api(`${base()}/sync`, "POST", {}); await refresh(); } catch (error) { showError(error); event.target.disabled = false; } });
   bindForm("wb-token", async fields => { const version = revision; await api(`${base()}/credentials`, "PUT", {token: fields.get("token")}); document.getElementById("wb-token").reset(); if (version === revision) await refresh(); });
   bindForm("wb-create-supply", fields => prepare("supply_create", { name: fields.get("name") }));
@@ -247,6 +295,9 @@
   for (const [id, delta] of [["wb-codes-prev", -100], ["wb-codes-next", 100]]) document.getElementById(id).addEventListener("click", async () => { codeOffset = Math.max(0, codeOffset + delta); try { await loadCodes(); } catch (error) { showError(error); } });
   bindForm("wb-codes-form", () => prepare("sgtin", { order_id: currentOrder.id, code_ids: [...selectedCodes] }));
   selector.addEventListener("change", () => { connection = selector.value; revision++; selected.clear(); selectedCodes.clear(); closeDialogs(); offset = 0; links = []; refresh().catch(showError); });
-  async function poll() { try { await refresh(); } catch (error) { showError(error); } window.setTimeout(poll, 3000); }
+  async function poll() { try { await refresh(); } catch (error) { showError(error); } window.setTimeout(poll, refreshSeconds * 1000); }
+  document.querySelectorAll("#wb-tabs button").forEach(v => v.classList.toggle("secondary", v.dataset.kind !== kind));
+  if (pageQuery.get("history") === "1") document.getElementById("wb-history").open = true;
+  loadWarehouseFilter().catch(showError);
   poll();
 })();

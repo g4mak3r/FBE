@@ -16,6 +16,7 @@ from fbe_flow.modules.connections import connection_context, require_connection
 from fbe_flow.modules.fulfillment import decode_action
 from fbe_flow.modules.marking import canonical
 from fbe_flow.modules.records import Records, decode_record
+from fbe_flow.modules.workspace import sales_predicate
 
 KINDS = {"products", "warehouses", "orders", "supplies", "returns"}
 ACTION_KINDS = {
@@ -103,7 +104,18 @@ class Commerce:
             "counts": counts,
         }
 
-    def records(self, seller, connection, kind, offset=0, limit=100, search="", status=""):
+    def records(
+        self,
+        seller,
+        connection,
+        kind,
+        offset=0,
+        limit=100,
+        search="",
+        status="",
+        stage="",
+        warehouse="",
+    ):
         value = self._connection(seller, connection)
         if kind not in KINDS or not 0 <= offset or not 1 <= limit <= 200:
             raise InvalidInput("Неверные параметры страницы")
@@ -122,9 +134,11 @@ class Commerce:
             )
             predicate += f" AND (external_id LIKE ? ESCAPE '\\' OR {field} LIKE ? ESCAPE '\\')"
             args.extend((pattern, pattern))
-        if status and kind == "orders":
-            predicate += " AND status=?"
-            args.append(status)
+        extra, values = sales_predicate(
+            value["adapter_key"], kind, stage, status if kind == "orders" else "", warehouse
+        )
+        predicate += extra
+        args.extend(values)
         with self.db.connection() as conn:
             total = conn.execute(
                 f"SELECT count(*) FROM {table} WHERE {predicate}", args

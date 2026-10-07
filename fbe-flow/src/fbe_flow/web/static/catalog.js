@@ -138,6 +138,19 @@
   }
   function buildProductFields(data) {
     const container = $("catalog-product-fields"); container.replaceChildren();
+    const groups = [
+      ["Основное", ["title", "sku", "family", "brand", "manufacturer", "country", "archived"]],
+      ["Идентификаторы и классификация", ["gtins", "barcodes", "tnved", "okpd2", "product_group", "marking_attestation"]],
+      ["Габариты и упаковка", ["length_mm", "width_mm", "height_mm", "net_weight_g", "gross_weight_g", "volume_ml", "package_quantity", "shelf_life_days"]],
+      ["Описание и состав", ["description", "composition"]],
+    ];
+    const destinations = new Map();
+    for (const [index, [title, keys]] of groups.entries()) {
+      const fieldset = node("fieldset", undefined, "catalog-field-group"); fieldset.append(node("legend", title));
+      if (index < 2) container.append(fieldset);
+      else { const details = node("details", undefined, "catalog-field-details"); details.append(node("summary", title), fieldset); container.append(details); }
+      for (const key of keys) destinations.set(key, fieldset);
+    }
     for (const [key, label] of Object.entries(labels)) {
       const l = node("label", label); let input;
       if (["archived", "marking_attestation"].includes(key)) {
@@ -151,7 +164,7 @@
         if (["title", "sku"].includes(key)) { input.required = true; input.maxLength = 240; }
         if (key === "tnved") { input.pattern = "[0-9]{10}"; input.maxLength = 10; input.inputMode = "numeric"; }
       }
-      input.name = key; l.append(input); container.append(l);
+      input.name = key; l.append(input); (destinations.get(key) || container).append(l);
     }
     $("catalog-attributes").replaceChildren(); for (const [k, v] of Object.entries(data.attributes || {})) addAttribute(k, v);
   }
@@ -291,6 +304,7 @@
       parent.append(tr([checkbox, c.code, c.external_status || "Не прочитан", events || "—"]));
     }
     if (!codePage.items.length) parent.append(tr(["", "Кодов пока нет", "", ""]));
+    const actor = $("catalog-code-event-form").elements.namedItem("actor"); if (!actor.value) actor.value = document.body.dataset.operator || "";
     $("catalog-code-connection-label").hidden = assigned; $("catalog-code-event-fields").hidden = !assigned;
     $("catalog-code-submit").textContent = assigned ? "Записать событие для выбранных" : "Назначить выбранные";
     $("catalog-code-event-form").actor.required = assigned;
@@ -419,6 +433,11 @@
     const chz = connections.filter((c) => c.adapter_key === "chz").map((c) => [c.id, c.name]);
     selectOptions($("catalog-chz-connection"), chz, "Выберите ЧЗ"); selectOptions($("catalog-code-connection"), chz, "Все подключения");
     await Promise.all([loadProducts(), stats()]);
+    if (["products", "sources", "exchange", "rules"].includes(pageQuery.get("tab"))) {
+      if (pageQuery.get("unlinked") === "1") $("catalog-source-search").elements.unlinked.checked = true;
+      document.querySelector('[data-catalog-tab="' + pageQuery.get("tab") + '"]').click();
+    }
+    if (pageQuery.get("product")) await editProduct(pageQuery.get("product"));
   }
   const tabs = Array.from(document.querySelectorAll("[data-catalog-tab]"));
   for (const [index, tab] of tabs.entries()) tab.addEventListener("keydown", (event) => {

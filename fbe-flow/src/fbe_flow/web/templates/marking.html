@@ -1,83 +1,16 @@
 {% set chz_connections = connections | selectattr('adapter_key', 'equalto', 'chz') | list %}
-<p><a class="chz-link" href="/sellers/{{ seller.id }}/catalog">Ассортимент: GTIN, ТН ВЭД, документы и сверка групп →</a></p>
-<section class="panel"><h2>Коды для маркетплейсов и магазина</h2><p>После нанесения и подтверждённого ввода в оборот свяжите товар с GTIN и назначьте полные КМ конкретному заказу. Резерв кода общий для WB, Ozon и магазина. Передача в WB/Ozon подтверждается чтением; в KIT коды вносятся через кабинет.</p><div class="toolbar"><a class="chz-link" href="/sellers/{{ seller.id }}/marketplaces?channel=wb">Коды и поставки WB →</a><a class="chz-link" href="/sellers/{{ seller.id }}/marketplaces?channel=ozon">Коды и отправления Ozon →</a><a class="chz-link" href="/sellers/{{ seller.id }}/store">{{ store_name }} →</a></div></section>
-<section class="panel">
-  <details {% if not chz_connections %}open{% endif %}>
-    <summary>Подключить аккаунт Честного Знака</summary>
-    <form id="chz-connect">
-      <label>Название подключения<input name="name" required maxlength="120" placeholder="Аккаунт компании"></label>
-      <label>Среда<select name="environment"><option value="sandbox">Тестовая</option><option value="production">Промышленная</option></select></label>
-      <label>ИНН<input name="inn" inputmode="numeric" pattern="\d{10}(\d{2})?" required></label>
-      <div class="toolbar"><button type="button" id="chz-certificates" class="secondary">Найти сертификаты УКЭП</button><small>Windows · КриптоПро CSP и CAdESCOM</small></div>
-      <label>Сертификат<select name="certificate" id="chz-certificate"><option value="">Выбрать сертификат</option></select></label>
-      <details><summary>Временный доступ по токену True API</summary>
-        <label>Действующий токен<input name="true_token" type="password" autocomplete="off" maxlength="8192"></label>
-        <p class="muted">После истечения срока токена обновите доступ. При выборе УКЭП авторизация выполняется автоматически.</p>
-      </details>
-      <button type="submit">Проверить и подключить</button>
-    </form>
-  </details>
-</section>
 {% if chz_connections %}
-<section class="panel">
-  <label>Аккаунт<select id="chz-connection">{% for item in chz_connections %}<option value="{{ item.id }}">{{ item.name }} · {{ item.external_account_id }}</option>{% endfor %}</select></label>
-  <div class="toolbar"><span id="chz-environment" class="badge"></span><span id="chz-sync-status">Каталог еще не обновлялся</span></div>
-  <p id="chz-last-sync" class="muted"></p>
-  <div class="toolbar">
-    <button type="button" id="chz-sync">Синхронизировать</button>
-    <button type="button" id="chz-force-sync" class="secondary">Перезагрузить все карточки</button>
-    <button type="button" id="chz-references" class="secondary">Обновить справочники и аккаунт</button>
-  </div>
-  <details><summary>Обновить доступ к текущему аккаунту</summary>
-    <form id="chz-renew">
-      <label>Отпечаток сертификата УКЭП<input name="certificate" pattern="[a-fA-F0-9]{40}" placeholder="40 символов из сертификата"></label>
-      <label>Или новый токен True API<input name="true_token" type="password" autocomplete="off" maxlength="8192"></label>
-      <button type="submit">Проверить и сохранить доступ</button>
-    </form>
-  </details>
-  <details><summary>Данные аккаунта и категории НК</summary><pre id="chz-references-json">Справочники загружаются после подключения.</pre></details>
-  <details><summary>Подключение СУЗ</summary>
-    <form id="chz-suz-config">
-      <label>OMS ID<input name="oms_id" required maxlength="36" placeholder="UUID из настроек СУЗ"></label>
-      <label>omsConnection<input name="oms_connection" required maxlength="36" placeholder="UUID внешнего подключения"></label>
-      <button type="submit">Проверить и сохранить СУЗ</button>
-    </form>
-    <p id="chz-suz-state" class="muted">Для СУЗ выберите УКЭП и укажите идентификаторы из своего аккаунта.</p>
-  </details>
-</section>
-<section class="panel">
-  <div class="toolbar"><h2>Национальный каталог</h2><span id="chz-count" class="muted"></span></div>
-  <form id="chz-search" class="toolbar"><input name="search" placeholder="Название, GTIN или ID НК" aria-label="Поиск карточек"><button type="submit" class="secondary">Найти</button></form>
-  <form id="chz-lookup" class="toolbar"><input name="gtin" inputmode="numeric" required pattern="\d{8}|\d{12,14}" placeholder="Запросить доступную карточку по GTIN" aria-label="GTIN"><button type="submit" class="secondary">Запросить НК</button></form>
-  <div id="chz-lookup-result"></div>
-  <div class="toolbar"><button type="button" id="chz-select-page" class="secondary">Выбрать страницу</button><button type="button" id="chz-clear-selection" class="secondary">Снять выбор</button><span id="chz-selected" class="muted">Выбрано: 0</span></div>
-  <div class="table-scroll"><table><thead><tr><th>Выбор</th><th>Товар</th><th>GTIN</th><th>Категория</th><th>Статус НК</th><th>Готовность</th></tr></thead><tbody id="chz-products"></tbody></table></div>
-  <div class="toolbar"><button type="button" id="chz-prev" class="secondary">Назад</button><button type="button" id="chz-next" class="secondary">Далее</button></div>
-  <details id="chz-edit-panel"><summary>Массовое изменение атрибутов</summary>
-    <p class="muted">Выберите карточки, загрузите их общий атрибутивный состав и подготовьте правки. НК проверит правила группы и модерации.</p>
-    <button type="button" id="chz-edit-model" class="secondary">Загрузить атрибуты выбранных карточек</button>
-    <form id="chz-edit">
-      <label>Атрибут<select name="attr_id" id="chz-attribute" required><option value="">Сначала загрузите атрибуты</option></select></label>
-      <p id="chz-attribute-hint" class="muted"></p>
-      <label>Новое значение<input name="attr_value" id="chz-attribute-value" required list="chz-presets"><datalist id="chz-presets"></datalist></label>
-      <label>Тип значения<select name="attr_value_type" id="chz-attribute-type"><option value="">Не указан</option></select></label>
-      <label class="check"><input name="moderation" type="checkbox">Отправить правки на модерацию</label>
-      <button type="submit">Посмотреть изменения</button>
-    </form>
-    <details><summary>Несколько значений или удаление атрибутов</summary>
-      <form id="chz-edit-json"><label>Массив good_attrs по спецификации НК<textarea name="attributes" rows="6" required placeholder='[{"attr_id":"…","attr_value":"…"}]'></textarea></label><label class="check"><input name="moderation" type="checkbox">Отправить на модерацию</label><button type="submit">Подготовить пакет</button></form>
-    </details>
-  </details>
-  <div class="toolbar"><label class="check"><input type="checkbox" id="chz-publication-agreement">Согласие на публикацию на сайте НК</label><button type="button" id="chz-prepare-sign">Подготовить публикацию выбранных (до 10)</button></div>
-</section>
-<section class="panel">
-  <h2>СУЗ — заказы кодов и нанесение</h2>
+<section class="panel operation-toolbar"><label {% if chz_connections|length == 1 %}hidden{% endif %}>Аккаунт ЧЗ<select id="chz-connection">{% for item in chz_connections %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></label><div class="toolbar"><span id="chz-environment" class="badge"></span><button id="chz-sync" type="button">Обновить ЧЗ</button><span id="chz-sync-status" role="status"></span></div><p id="chz-last-sync" class="muted"></p><details><summary>Дополнительное обновление</summary><div class="actions"><button id="chz-force-sync" class="secondary" type="button">Перечитать каталог полностью</button><button id="chz-references" class="secondary" type="button">Обновить справочники</button></div></details></section>
+<section class="panel"><form id="chz-catalog-pick" class="toolbar"><label>Товар из ассортимента<input name="search" placeholder="Артикул, название или GTIN" maxlength="150"></label><button class="secondary" type="submit">Найти товар</button><select id="chz-catalog-product" aria-label="Выбрать товар из ассортимента"><option value="">Выбрать товар</option></select><a class="text-link" href="/sellers/{{ seller.id }}/catalog">Ассортимент</a></form><p id="chz-catalog-selection" class="muted"></p></section>
+<div data-view-scope="marking"><div class="toolbar section-tabs" role="tablist" aria-label="Разделы ЧЗ"><button type="button" data-view-tab="codes" role="tab">Коды</button><button type="button" data-view-tab="turnover" role="tab">Оборот</button><button type="button" data-view-tab="nk" role="tab">Каталог НК</button><button type="button" data-view-tab="history" role="tab">История</button></div>
+<div data-view-panel="codes"><section class="panel">
+  <h2>Заказы кодов</h2>
   <details><summary>Заказать коды маркировки</summary>
     <form id="chz-order">
       <label>Товарная группа<select name="product_group" class="chz-group" required></select></label>
-      <label>Номер задания<input name="request_key" required maxlength="120" placeholder="Уникальный номер производственного задания"></label>
-      <label>Позиции products (JSON)<textarea name="products" rows="6" required placeholder='[{"gtin":"…","quantity":1,"serialNumberType":"OPERATOR","templateId":…,"cisType":"UNIT"}]'></textarea></label>
-      <label>Атрибуты заказа вашей группы (JSON)<textarea name="attributes" rows="5" required>{}</textarea></label>
+      <div class="catalog-grid"><label>GTIN товара<input name="catalog_gtin" inputmode="numeric" pattern="[0-9]{14}"></label><label>Количество кодов<input name="catalog_quantity" type="number" min="1" max="10000000" value="1"></label><label>ID шаблона вашей группы СУЗ<input name="catalog_template" type="number" min="1"></label></div><label>Номер задания<input name="request_key" required maxlength="120" placeholder="Уникальный номер производственного задания"></label>
+      <details><summary>Несколько позиций или дополнительные параметры СУЗ</summary><label>Позиции products, JSON<textarea name="products" rows="6" placeholder='[{"gtin":"…","quantity":1,"serialNumberType":"OPERATOR","templateId":…,"cisType":"UNIT"}]'></textarea></label>
+      <label>Атрибуты заказа вашей группы, JSON<textarea name="attributes" rows="5">{}</textarea></label></details>
       <button type="submit">Подготовить заказ</button>
     </form>
   </details>
@@ -106,7 +39,7 @@
   <div class="toolbar"><button type="button" id="chz-codes-prev" class="secondary">Назад</button><button type="button" id="chz-codes-next" class="secondary">Далее</button><button type="button" id="chz-codes-all" class="secondary">Выбрать страницу</button><button type="button" id="chz-codes-clear" class="secondary">Снять выбор</button><span id="chz-codes-selected">Выбрано: 0</span></div>
   <form id="chz-utilisation-selected"><label>Группа выбранных КМ<select name="product_group" class="chz-group" required></select></label><label>Атрибуты нанесения вашей группы (JSON)<textarea name="attributes" rows="4">{}</textarea></label><button type="submit">Подготовить нанесение выбранных КМ</button></form>
 </section>
-<section class="panel">
+</div><div data-view-panel="turnover" hidden><section class="panel">
   <h2>Ввод и вывод из оборота</h2>
   <p class="muted">Документ для единиц товара в JSON. Дополнительные поля вашей группы заполните по True API. Перед отправкой проверяются ИНН, принадлежность КИ и текущие статусы.</p>
   <form id="chz-true-document">
@@ -118,9 +51,34 @@
     <button type="submit">Проверить и подготовить</button>
   </form>
 </section>
-<section class="panel"><h2>Журнал Честного Знака</h2><p class="muted">Отправка, внешняя обработка и результат — отдельные состояния. Проверка принятых документов продолжается при закрытой странице.</p><div id="chz-documents"></div></section>
-<dialog id="chz-card"><h2 id="chz-card-title"></h2><p id="chz-card-status" class="muted"></p><pre id="chz-card-json"></pre><button type="button" id="chz-card-close" class="secondary">Закрыть</button></dialog>
+</div><div data-view-panel="nk" hidden><section class="panel">
+  <div class="toolbar"><h2>Национальный каталог</h2><span id="chz-count" class="muted"></span></div>
+  <form id="chz-search" class="toolbar"><input name="search" placeholder="Название, GTIN или ID НК" aria-label="Поиск карточек"><button type="submit" class="secondary">Найти</button></form>
+  <form id="chz-lookup" class="toolbar"><input name="gtin" inputmode="numeric" required pattern="\d{8}|\d{12,14}" placeholder="Запросить доступную карточку по GTIN" aria-label="GTIN"><button type="submit" class="secondary">Запросить НК</button></form>
+  <div id="chz-lookup-result"></div>
+  <div class="toolbar"><button type="button" id="chz-select-page" class="secondary">Выбрать страницу</button><button type="button" id="chz-clear-selection" class="secondary">Снять выбор</button><span id="chz-selected" class="muted">Выбрано: 0</span></div>
+  <div class="table-scroll"><table><thead><tr><th>Выбор</th><th>Товар</th><th>GTIN</th><th>Категория</th><th>Статус НК</th><th>Готовность</th></tr></thead><tbody id="chz-products"></tbody></table></div>
+  <div class="toolbar"><button type="button" id="chz-prev" class="secondary">Назад</button><button type="button" id="chz-next" class="secondary">Далее</button></div>
+  <details id="chz-edit-panel"><summary>Массовое изменение атрибутов</summary>
+    <p class="muted">Выберите карточки, загрузите их общий атрибутивный состав и подготовьте правки. НК проверит правила группы и модерации.</p>
+    <button type="button" id="chz-edit-model" class="secondary">Загрузить атрибуты выбранных карточек</button>
+    <form id="chz-edit">
+      <label>Атрибут<select name="attr_id" id="chz-attribute" required><option value="">Сначала загрузите атрибуты</option></select></label>
+      <p id="chz-attribute-hint" class="muted"></p>
+      <label>Новое значение<input name="attr_value" id="chz-attribute-value" required list="chz-presets"><datalist id="chz-presets"></datalist></label>
+      <label>Тип значения<select name="attr_value_type" id="chz-attribute-type"><option value="">Не указан</option></select></label>
+      <label class="check"><input name="moderation" type="checkbox">Отправить правки на модерацию</label>
+      <button type="submit">Посмотреть изменения</button>
+    </form>
+    <details><summary>Несколько значений или удаление атрибутов</summary>
+      <form id="chz-edit-json"><label>Массив good_attrs по спецификации НК<textarea name="attributes" rows="6" required placeholder='[{"attr_id":"…","attr_value":"…"}]'></textarea></label><label class="check"><input name="moderation" type="checkbox">Отправить на модерацию</label><button type="submit">Подготовить пакет</button></form>
+    </details>
+  </details>
+  <div class="toolbar"><label class="check"><input type="checkbox" id="chz-publication-agreement">Согласие на публикацию на сайте НК</label><button type="button" id="chz-prepare-sign">Подготовить публикацию выбранных (до 10)</button></div>
+</section>
+</div><div data-view-panel="history" hidden><section class="panel"><h2>Журнал Честного Знака</h2><p class="muted">Отправка, внешняя обработка и результат — отдельные состояния. Проверка принятых документов продолжается при закрытой странице.</p><div id="chz-documents"></div></section>
+</div></div><dialog id="chz-card"><h2 id="chz-card-title"></h2><p id="chz-card-status" class="muted"></p><div id="chz-card-fields"></div><details><summary>Ответ Национального каталога</summary><pre id="chz-card-json"></pre></details><button type="button" id="chz-card-close" class="secondary">Закрыть</button></dialog>
 <dialog id="chz-document"><h2 id="chz-document-title"></h2><p id="chz-document-state"></p><div id="chz-document-preview"></div><details><summary>Содержимое и результат</summary><pre id="chz-document-json"></pre></details><div id="chz-document-events"></div><div id="chz-document-actions" class="toolbar"></div><form id="chz-reconcile" hidden><label>Внешний ID документа или блока<input name="external_id" maxlength="150"></label><button type="submit">Сверить результат без повторной отправки</button></form><button type="button" id="chz-document-close" class="secondary">Закрыть</button></dialog>
 {% else %}
-<section class="panel empty"><h2>Подключите аккаунт</h2><p>Карточки, категории и статусы появятся после проверки доступа. Данные НК будут принадлежать выбранному продавцу.</p></section>
+<section class="panel empty"><h2>Подключите Честный Знак</h2><a class="button-link" href="/sellers/{{ seller.id }}/settings?tab=integrations&adapter=chz">Перейти к настройкам ЧЗ</a></section>
 {% endif %}

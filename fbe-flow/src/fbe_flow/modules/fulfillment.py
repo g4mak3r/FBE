@@ -17,6 +17,7 @@ from fbe_flow.modules.catalog import check_source_binding
 from fbe_flow.modules.connections import connection_context, require_connection
 from fbe_flow.modules.marking import canonical
 from fbe_flow.modules.records import Records, decode_record
+from fbe_flow.modules.workspace import sales_predicate
 
 KINDS = {"products", "warehouses", "orders", "supplies"}
 TERMINAL = {"confirmed", "cancelled"}
@@ -121,7 +122,19 @@ class Fulfillment:
             "counts": counts,
         }
 
-    def records(self, seller, connection, kind, offset=0, limit=100, search="", supply=None):
+    def records(
+        self,
+        seller,
+        connection,
+        kind,
+        offset=0,
+        limit=100,
+        search="",
+        supply=None,
+        stage="",
+        status="",
+        warehouse="",
+    ):
         self._connection(seller, connection)
         if kind not in KINDS or offset < 0 or not 1 <= limit <= 200 or len(search) > 150:
             raise InvalidInput("Неверные параметры страницы WB")
@@ -140,6 +153,9 @@ class Fulfillment:
                 raise InvalidInput("Фильтр поставки доступен для заданий")
             predicate += " AND supply_external_id=?"
             args.append(supply)
+        extra, values = sales_predicate("wb", kind, stage, status, warehouse)
+        predicate += extra
+        args.extend(values)
         with self.db.connection() as conn:
             total = conn.execute(f"SELECT count(*) FROM {kind} WHERE {predicate}", args).fetchone()[
                 0

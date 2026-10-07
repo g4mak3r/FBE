@@ -148,9 +148,11 @@ def records(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     search: Annotated[str, Query(max_length=150)] = "",
     status: Annotated[str, Query(max_length=100)] = "",
+    stage: Annotated[str, Query(max_length=30)] = "",
+    warehouse: Annotated[str, Query(max_length=120)] = "",
 ):
     return request.app.state.commerce.records(
-        seller_id, connection_id, kind, offset, limit, search, status
+        seller_id, connection_id, kind, offset, limit, search, status, stage, warehouse
     )
 
 

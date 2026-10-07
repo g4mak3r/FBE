@@ -1,38 +1,20 @@
 {% set commerce_connections = connections | selectattr('adapter_key', 'equalto', commerce_key) | list %}
 {% set commerce_label = 'Ozon' if commerce_key == 'ozon' else 'Яндекс KIT' %}
 <div id="commerce-root" data-adapter="{{ commerce_key }}">
-<section class="panel">
-  <details {% if not commerce_connections %}open{% endif %}><summary>Подключить {{ commerce_label }}</summary>
-    <form id="commerce-connect">
-      <label>Название подключения<input name="name" maxlength="120" required></label>
-      {% if commerce_key == 'ozon' %}<label>Client-Id<input name="client_id" inputmode="numeric" pattern="[0-9]+" required></label>
-      {% else %}<label>ИНН организации магазина<input name="tin" inputmode="numeric" pattern="([0-9]{10}|[0-9]{12})" required></label><p class="muted">KIT подтверждает ID магазина. ИНН указывается вами для связи с вашим аккаунтом ЧЗ: публичный API KIT его не возвращает.</p>{% endif %}
-      <label>API-ключ<input name="token" type="password" autocomplete="new-password" required></label>
-      <label class="check"><input name="read_only" type="checkbox">Режим только чтения в FBE</label>
-      <p class="muted">{% if commerce_key == 'ozon' %}Используется кабинет Ozon Seller и его API-ключ. Ozon проверит Client-Id, ключ и ИНН организации.{% else %}Токен: в кабинете KIT откройте «Настройки → API → Сгенерировать токен». Один токен соответствует одному магазину.{% endif %}</p>
-      <button type="submit">Проверить и подключить</button>
-    </form>
-  </details>
-</section>
+{% if not commerce_connections %}<section class="panel empty"><h2>Подключите {{ commerce_label }}</h2><a class="button-link" href="/sellers/{{ seller.id }}/settings?tab=integrations&adapter={{ commerce_key }}">Перейти к настройкам</a></section>{% endif %}
 {% if commerce_key == 'kit' %}
-<section class="panel"><h2>Заказы, оплата и доставка</h2><p>Статусы оплаты, доставки и возвратов читаются из KIT. Частичный возврат, состав заказа, коды маркировки и чеки оформляются в кабинете KIT через подключенные кассу и доставку.</p><p class="muted">FBE резервирует КМ для конкретной позиции и проверяет ЧЗ. Запись КМ в заказ KIT остается отдельным шагом: публичный API не предоставляет этот метод. Это предотвращает повторный чек и повторный вывод кода.</p><a class="chz-link" href="https://yandex.ru/support/kit/ru/orders/datamatrix" target="_blank" rel="noopener">Маркировка в KIT →</a></section>
+<details class="panel"><summary>Маркировка, оплата и доставка KIT</summary><p>Статусы оплаты, доставки и возвратов читаются из KIT. Частичный возврат, состав заказа, коды маркировки и чеки оформляются в кабинете KIT через подключенные кассу и доставку.</p><p class="muted">FBE резервирует КМ для конкретной позиции и проверяет ЧЗ. Запись КМ в заказ KIT остается отдельным шагом: публичный API не предоставляет этот метод. Это предотвращает повторный чек и повторный вывод кода.</p><a class="chz-link" href="https://yandex.ru/support/kit/ru/orders/datamatrix" target="_blank" rel="noopener">Маркировка в KIT →</a></details>
 {% endif %}
 {% if commerce_connections %}
-<section class="panel">
-  <label>Аккаунт {{ commerce_label }}<select id="commerce-connection">{% for item in commerce_connections %}<option value="{{ item.id }}">{{ item.name }} · {{ item.tin }}</option>{% endfor %}</select></label>
-  <div class="toolbar"><button id="commerce-sync" type="button">Обновить {{ commerce_label }}</button><span id="commerce-sync-status" role="status"></span></div>
-  <p id="commerce-summary" class="muted"></p>
-  <p class="muted">{% if commerce_key == 'ozon' %}FBS: товары, склады, отправления за последние 30 дней, отгрузки на сегодня и возвраты. Сборка переводит отправление в готовность к отгрузке; факт доставки читается отдельно.{% else %}Товары и все страницы заказов KIT. Поиск и фильтр выполняются по сохраненным данным; успешное полное чтение отмечается отдельно. У каждого грузоместа сохраняется собственная доставка.{% endif %}</p>
-  <details><summary>Обновить API-ключ</summary><form id="commerce-token"><label>Новый ключ<input name="token" type="password" autocomplete="new-password" required></label><button type="submit">Проверить и сохранить</button></form></details>
-</section>
+<section class="panel operation-toolbar"><label {% if commerce_connections|length == 1 %}hidden{% endif %}>Аккаунт<select id="commerce-connection">{% for item in commerce_connections %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></label><div class="toolbar"><button id="commerce-sync" type="button">Обновить {{ 'Ozon' if commerce_key == 'ozon' else store_name }}</button><span id="commerce-sync-status" role="status"></span></div><p id="commerce-summary" class="muted"></p></section>
 <section class="panel">
   <div class="toolbar" id="commerce-tabs"><button data-kind="orders" type="button">Заказы</button><button data-kind="products" type="button" class="secondary">Товары</button><button data-kind="warehouses" type="button" class="secondary">Склады</button>{% if commerce_key == 'ozon' %}<button data-kind="supplies" type="button" class="secondary">Отгрузки</button><button data-kind="returns" type="button" class="secondary">Возвраты</button>{% endif %}</div>
-  <form class="toolbar" id="commerce-search"><input name="search" aria-label="Поиск заказов и товаров" placeholder="Номер, артикул или название" maxlength="150"><input name="status" aria-label="Фильтр статуса" placeholder="Статус заказа" maxlength="100"><button class="secondary" type="submit">Найти</button></form>
+  <form class="toolbar sales-filters" id="commerce-search"><label>Поиск<input name="search" placeholder="Номер, артикул или штрихкод" maxlength="150"></label><label>Этап<select name="stage"><option value="">Все этапы</option><option value="assembly">К сборке</option><option value="shipping">К отгрузке</option></select></label><label>Статус<select name="status"><option value="">Все статусы</option></select></label><label>Склад<select name="warehouse"><option value="">Все склады</option></select></label><button class="secondary" type="submit">Найти</button></form>
   <div class="table-scroll"><table><thead id="commerce-head"></thead><tbody id="commerce-records"></tbody></table></div>
   <div class="toolbar"><button id="commerce-prev" class="secondary" type="button">Назад</button><span id="commerce-count"></span><button id="commerce-next" class="secondary" type="button">Далее</button></div>
 </section>
-<section class="panel"><h2>Связи с Честным Знаком</h2><div id="commerce-links"></div><a class="chz-link" href="/sellers/{{ seller.id }}/marking">Национальный каталог и коды →</a></section>
-<section class="panel"><h2>Журнал действий</h2><div id="commerce-actions" aria-live="polite"></div></section>
+<details class="panel"><summary>Связи товаров с Честным Знаком</summary><div id="commerce-links"></div><a class="chz-link" href="/sellers/{{ seller.id }}/marking">Национальный каталог и коды →</a></details>
+<details class="panel" id="commerce-history"><summary>История действий</summary><div id="commerce-actions" aria-live="polite"></div></details>
 <dialog id="commerce-action-dialog"><h2 id="commerce-action-title"></h2><p id="commerce-action-status" role="status"></p><pre id="commerce-action-preview"></pre><p id="commerce-action-result"></p><div id="commerce-action-events"></div><details><summary>Данные действия</summary><pre id="commerce-action-data"></pre></details>
   <div class="toolbar"><button id="commerce-action-send" type="button">Выполнить действие</button><button id="commerce-action-reconcile" class="secondary" type="button">Сверить результат</button><button id="commerce-action-cancel" class="secondary" type="button">Отменить подготовку</button><button id="commerce-copy-codes" class="secondary" type="button">Скопировать полные КМ</button><button class="commerce-close secondary" type="button">Закрыть</button></div>
 </dialog>
@@ -45,4 +27,3 @@
 {% endif %}
 {% endif %}
 </div>
-<p><a class="chz-link" href="/sellers/{{ seller.id }}/catalog">Единый ассортимент и связи товаров →</a></p>

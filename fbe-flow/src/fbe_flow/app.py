@@ -28,6 +28,7 @@ from fbe_flow.modules.operations import Operations, Worker
 from fbe_flow.modules.records import Records
 from fbe_flow.modules.sellers import Sellers
 from fbe_flow.modules.settings import Settings
+from fbe_flow.modules.workspace import Workspace
 from fbe_flow.web.catalog import router as catalog_router
 from fbe_flow.web.commerce import router as commerce_router
 from fbe_flow.web.marking import router as marking_router
@@ -105,7 +106,7 @@ def create_app(
                 if config.worker_enabled:
                     await asyncio.to_thread(worker.stop)
 
-    app = FastAPI(title="FBE Flow", version="0.7.0", lifespan=lifespan)
+    app = FastAPI(title="FBE Flow", version="0.8.0", lifespan=lifespan)
     app.state.config = config
     app.state.registry = registry
     app.state.database = database
@@ -118,6 +119,7 @@ def create_app(
     app.state.vault = vault
     app.state.signer = signer
     app.state.settings = Settings(database)
+    app.state.workspace = Workspace(database)
     app.state.records = Records(database)
     app.state.operations = operations
     app.state.worker = worker

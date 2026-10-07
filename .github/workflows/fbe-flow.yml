@@ -31,7 +31,10 @@ jobs:
           cache: pip
           cache-dependency-path: fbe-flow/requirements-lock.txt
       - run: python -m pip install -c requirements-lock.txt ".[dev]"
-      - run: node --check src/fbe_flow/web/static/catalog.js
+      - name: Validate browser scripts
+        shell: bash
+        run: |
+          for file in src/fbe_flow/web/static/*.js qa/*_browser.cjs; do node --check "$file"; done
       - run: python -m ruff check .
       - run: python -m ruff format --check .
       - run: python -m pytest
@@ -63,6 +66,9 @@ jobs:
       - name: Assortment browser acceptance
         if: runner.os == 'Linux'
         run: node qa/catalog_browser.cjs
+      - name: Workspace browser acceptance
+        if: runner.os == 'Linux'
+        run: node qa/workspace_browser.cjs
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Linux'
         with:

@@ -27,7 +27,7 @@ def create_connection(client, seller, account):
 def test_empty_foundation_and_shell_pages(tmp_path):
     app = create_app(AppConfig(tmp_path))
     with TestClient(app, base_url="http://localhost", headers={"X-FBE-Flow": "1"}) as client:
-        assert "Начните с продавца" in client.get("/").text
+        assert "Создайте организацию" in client.get("/").text
         assert client.get("/api/adapters").json() == [
             {"key": "chz", "label": "Честный Знак"},
             {"key": "wb", "label": "Wildberries FBS"},

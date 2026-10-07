@@ -3,6 +3,7 @@
 (() => {
   const root = `${sellerApi}/marking`;
   const select = document.getElementById("chz-connection");
+  if (select && [...select.options].some(v => v.value === pageQuery.get("connection"))) select.value = pageQuery.get("connection");
   let connection = select?.value, offset = 0, search = "", revision = 0;
   let refreshPromise = null, rerun = false;
   let parameters = {}, currentPage = [], codePage = [], codesOffset = 0, activeDocument = null;
@@ -47,10 +48,29 @@
     if (!values.length) report("В текущем пользователе Windows нет действующих сертификатов с закрытым ключом.");
   });
   if (!select) return;
+  let catalogProducts = [];
+  bindForm("chz-catalog-pick", async fields => {
+    const result = await api(sellerApi + "/catalog/products?limit=50&search=" + encodeURIComponent(fields.get("search")));
+    catalogProducts = result.items;
+    const picker = document.getElementById("chz-catalog-product"), prompt = make("option", "Выбрать товар"); prompt.value = "";
+    picker.replaceChildren(prompt, ...catalogProducts.map(p => { const option = make("option", p.sku + " · " + p.title); option.value = p.id; return option; }));
+    if (!result.items.length) report("Товар не найден в ассортименте");
+  });
+  document.getElementById("chz-catalog-product").addEventListener("change", event => {
+    const p = catalogProducts.find(v => v.id === event.target.value); if (!p) return;
+    const gtin = p.gtins[0] || "";
+    document.getElementById("chz-catalog-selection").textContent = p.sku + " · GTIN " + (gtin || "не задан") + " · " + (p.product_group || "группа не задана");
+    for (const id of ["chz-lookup", "chz-order-buffer"]) { const input = document.getElementById(id)?.elements.namedItem("gtin"); if (input) input.value = gtin; }
+    for (const group of document.querySelectorAll(".chz-group")) if ([...group.options].some(v => v.value === p.product_group)) group.value = p.product_group;
+    const order = document.getElementById("chz-order");
+    if (order?.elements.namedItem("catalog_gtin")) { order.elements.namedItem("catalog_gtin").value = gtin; if (!order.elements.request_key.value) order.elements.request_key.value = crypto.randomUUID(); }
+  });
   const cardDialog = document.getElementById("chz-card");
   const openCard = (title, value, hint) => {
     document.getElementById("chz-card-title").textContent = title;
     document.getElementById("chz-card-status").textContent = hint;
+    const fields = document.getElementById("chz-card-fields"); fields.replaceChildren();
+    for (const [key, label] of [["good_name", "Наименование"], ["gtin", "GTIN"], ["good_status", "Статус НК"], ["tnved", "ТН ВЭД"], ["brand", "Бренд"]]) if (value[key]) fields.append(make("p", label + ": " + (Array.isArray(value[key]) ? value[key].join(", ") : value[key])));
     document.getElementById("chz-card-json").textContent = JSON.stringify(value, null, 2);
     if (!cardDialog.open) cardDialog.showModal();
   };
@@ -123,10 +143,10 @@
     }
     const suzConfig = document.getElementById("chz-suz-config");
     for (const name of ["oms_id", "oms_connection"]) {
-      const input = suzConfig.elements.namedItem(name);
-      if (document.activeElement !== input && !input.dataset.edited) input.value = parameters[name] || "";
+      const input = suzConfig?.elements.namedItem(name);
+      if (input && document.activeElement !== input && !input.dataset.edited) input.value = parameters[name] || "";
     }
-    document.getElementById("chz-suz-state").textContent = parameters.oms_id && parameters.oms_connection && parameters.has_certificate
+    if (document.getElementById("chz-suz-state")) document.getElementById("chz-suz-state").textContent = parameters.oms_id && parameters.oms_connection && parameters.has_certificate
       ? `СУЗ настроен: ${parameters.oms_id}` : "Для СУЗ выберите УКЭП и укажите OMS ID и omsConnection.";
     const data = overview.snapshots, sync = data.sync?.value;
     const active = sync && ["queued", "running"].includes(sync.state);
@@ -137,7 +157,7 @@
       : "Каталог еще не обновлялся";
     document.getElementById("chz-last-sync").textContent = data.last_sync
       ? `Последний полный обход: ${new Date(data.last_sync.updated_at).toLocaleString("ru-RU")}` : "Полный обход еще не завершен";
-    document.getElementById("chz-references-json").textContent = JSON.stringify({ account: data.account?.value, categories: data.categories?.value }, null, 2);
+    if (document.getElementById("chz-references-json")) document.getElementById("chz-references-json").textContent = JSON.stringify({ account: data.account?.value, categories: data.categories?.value }, null, 2);
     document.getElementById("chz-order-status").textContent = JSON.stringify({ buffers: data.suz_status?.value, blocks: data.suz_blocks?.value }, null, 2);
     document.getElementById("chz-receipt-status").textContent = JSON.stringify(data.suz_receipt?.value || {}, null, 2);
     const lookup = document.getElementById("chz-lookup-result");
@@ -215,7 +235,12 @@
   bindForm("chz-edit-json", fields => prepareAction("edit", { product_ids: selectedIds(), attributes: parse(fields.get("attributes"), "array"), moderation: fields.has("moderation") }));
   for (const input of document.querySelectorAll("#chz-suz-config input")) input.addEventListener("input", () => { input.dataset.edited = "1"; });
   bindForm("chz-suz-config", async fields => { await api(`${endpoint()}/suz`, "PUT", Object.fromEntries(fields)); report("Подключение СУЗ проверено и сохранено"); await refreshData(); });
-  bindForm("chz-order", fields => prepareAction("suz_order", { product_group: fields.get("product_group"), request_key: fields.get("request_key"), document: { productGroup: fields.get("product_group"), products: parse(fields.get("products"), "array"), attributes: parse(fields.get("attributes"), "object") } }));
+  bindForm("chz-order", fields => {
+    const raw = fields.get("products").trim();
+    const products = raw ? parse(raw, "array") : [{gtin: fields.get("catalog_gtin"), quantity: Number(fields.get("catalog_quantity")), templateId: Number(fields.get("catalog_template")), serialNumberType: "OPERATOR", cisType: "UNIT"}];
+    if (!raw && (!/^[0-9]{14}$/.test(products[0].gtin) || !Number.isInteger(products[0].templateId) || products[0].templateId < 1)) throw new Error("Выберите товар с GTIN и укажите ID шаблона своей группы СУЗ");
+    return prepareAction("suz_order", {product_group: fields.get("product_group"), request_key: fields.get("request_key"), document: {productGroup: fields.get("product_group"), products, attributes: parse(fields.get("attributes") || "{}", "object")}});
+  });
   bindForm("chz-order-buffer", async fields => {
     const payload = { product_group: fields.get("product_group"), order_id: fields.get("order_id"), gtin: fields.get("gtin"), quantity: Number(fields.get("quantity")) };
     const action = fields.get("action");
@@ -266,6 +291,7 @@
     if (!values.length) document.getElementById("chz-documents").append(make("p", "Подготовленных документов ещё нет.", "muted"));
   }
   function renderDocument(value) {
+    actionContext(document.getElementById("chz-document"), select.selectedOptions[0].textContent, parameters.inn);
     const previous = activeDocument?.id; activeDocument = value;
     document.getElementById("chz-document-title").textContent = value.title;
     document.getElementById("chz-document-state").textContent = `${documentStates[value.state] || value.state}${value.active_operation ? " · Задание в очереди или выполняется" : ""}${value.external_status ? " · " + value.external_status : ""}${value.error_code ? " · " + value.error_code : ""}`;
@@ -303,6 +329,6 @@
     report("Основа создана. Заполните причину, документы и дополнительные сведения вашей группы.");
   });
   document.getElementById("chz-true-file").addEventListener("change", async event => { try { const file = event.target.files[0]; if (!file) return; if (file.size > 5 * 1024 * 1024) throw new Error("Лимит файла 5 МиБ"); document.getElementById("chz-true-json").value = JSON.stringify(parse(await file.text(), "object"), null, 2); } catch (error) { showError(error); } });
-  async function poll() { if (!document.hidden) await refreshData(); window.setTimeout(poll, 4000); }
+  async function poll() { if (!document.hidden) await refreshData(); window.setTimeout(poll, refreshSeconds * 1000); }
   poll();
 })();

@@ -1,33 +1,20 @@
 {% set wb_connections = connections | selectattr('adapter_key', 'equalto', 'wb') | list %}
-<section class="panel">
-  <details {% if not wb_connections %}open{% endif %}><summary>Подключить продавца WB</summary>
-    <form id="wb-connect"><label>Название подключения<input name="name" maxlength="120" required></label>
-      <label>API-токен WB<input name="token" type="password" autocomplete="new-password" required></label>
-      <p class="muted">Нужны категории «Контент» и «Маркетплейс». Токен только на чтение позволяет синхронизацию. Для передачи кодов и работы с поставками нужен доступ на запись.</p>
-      <button type="submit">Проверить и подключить</button>
-    </form>
-  </details>
-</section>
+{% if not wb_connections %}<section class="panel empty"><h2>Подключите Wildberries</h2><a class="button-link" href="/sellers/{{ seller.id }}/settings?tab=integrations&adapter=wb">Перейти к настройкам WB</a></section>{% endif %}
 {% if wb_connections %}
-<section class="panel">
-  <label>Аккаунт WB<select id="wb-connection">{% for item in wb_connections %}<option value="{{ item.id }}">{{ item.name }} · {{ item.tin }}</option>{% endfor %}</select></label>
-  <div class="toolbar"><button id="wb-sync" type="button">Синхронизировать WB</button><span id="wb-sync-status" role="status"></span></div>
-  <p id="wb-summary" class="muted"></p>
-  <p class="muted">Новые задания, история заданий за 30 дней и все доступные поставки. Ниже — сохранённые данные; перед отправкой приложение проверяет актуальное состояние WB и ЧЗ.</p>
-  <details><summary>Обновить токен WB</summary><form id="wb-token"><label>Новый API-токен<input name="token" type="password" autocomplete="new-password" required></label><button type="submit">Проверить и сохранить</button></form></details>
-</section>
+<section class="panel operation-toolbar"><label {% if wb_connections|length == 1 %}hidden{% endif %}>Аккаунт WB<select id="wb-connection">{% for item in wb_connections %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></label><div class="toolbar"><button id="wb-sync" type="button">Обновить WB</button><span id="wb-sync-status" role="status"></span></div><p id="wb-summary" class="muted"></p></section>
 <section class="panel">
   <div class="toolbar" id="wb-tabs" aria-label="Разделы WB">
     <button data-kind="orders" type="button">Задания</button><button data-kind="supplies" class="secondary" type="button">Поставки</button><button data-kind="products" class="secondary" type="button">Товары</button><button data-kind="warehouses" class="secondary" type="button">Склады</button>
   </div>
-  <form class="toolbar" id="wb-search"><input name="search" aria-label="Поиск WB" placeholder="ID, артикул или название" maxlength="150"><button class="secondary" type="submit">Найти</button></form>
-  <div class="toolbar" id="wb-order-tools"><span id="wb-selection">0 заданий выбрано</span><select id="wb-supply-select" aria-label="Поставка для выбранных заданий"></select><button id="wb-add-orders" type="button">Добавить / переместить в поставку</button></div>
+  <form class="toolbar sales-filters" id="wb-search"><label>Поиск<input name="search" placeholder="Номер, артикул или штрихкод" maxlength="150"></label><label>Этап<select name="stage"><option value="">Все этапы</option><option value="assembly">К сборке</option><option value="shipping">К отгрузке: открытые поставки</option></select></label><label>Статус<select name="status"><option value="">Все статусы</option><option value="new">Новое</option><option value="confirm">На сборке</option><option value="complete">В доставке</option><option value="cancel">Отменено</option></select></label><label>Склад<select name="warehouse"><option value="">Все склады</option></select></label><button class="secondary" type="submit">Найти</button></form>
+  <div class="toolbar selection-toolbar" id="wb-order-tools" hidden><span id="wb-selection">0 заданий выбрано</span><select id="wb-supply-select" aria-label="Поставка для выбранных заданий"></select><button id="wb-add-orders" type="button">Добавить / переместить в поставку</button></div>
   <div class="table-scroll"><table><thead id="wb-head"></thead><tbody id="wb-records"></tbody></table></div>
   <div class="toolbar"><button id="wb-prev" class="secondary" type="button">Назад</button><span id="wb-count"></span><button id="wb-next" class="secondary" type="button">Далее</button></div>
   <details><summary>Создать поставку WB</summary><form id="wb-create-supply"><label>Название<input name="name" maxlength="95" required></label><button type="submit">Подготовить создание</button></form></details>
 </section>
-<section class="panel"><h2>Связи с Честным Знаком</h2><div id="wb-links"></div><p class="muted">Каждый размер chrtID связывается с конкретной карточкой НК, GTIN и группой. Штрихкод WB не используется как автоматическое доказательство совпадения товара.</p><a class="chz-link" href="/sellers/{{ seller.id }}/marking">Коды, нанесение и ввод в оборот →</a></section>
-<section class="panel"><h2>Журнал действий WB</h2><div id="wb-actions" aria-live="polite"></div></section>
+<details class="panel"><summary>Связи товаров с Честным Знаком</summary><div id="wb-links"></div><p class="muted">Каждый размер chrtID связывается с конкретной карточкой НК, GTIN и группой. Штрихкод WB не используется как автоматическое доказательство совпадения товара.</p><a class="chz-link" href="/sellers/{{ seller.id }}/marking">Коды, нанесение и ввод в оборот →</a></details>
+<details class="panel" id="wb-history"><summary>История действий WB</summary><div id="wb-actions" aria-live="polite"></div></details>
+<dialog id="wb-order-dialog"><h2 id="wb-order-title"></h2><div id="wb-order-details"></div><details><summary>Данные WB</summary><pre id="wb-order-source"></pre></details><button type="button" class="secondary wb-close">Закрыть</button></dialog>
 <dialog id="wb-link-dialog"><form id="wb-link-form">
   <h2>Связать товар с ЧЗ</h2><p id="wb-link-title"></p>
   <label>Размер WB<select name="chrt_id" required></select></label>
@@ -46,4 +33,3 @@
 </form></dialog>
 <dialog id="wb-action-dialog"><h2 id="wb-action-title"></h2><p id="wb-action-status" role="status"></p><pre id="wb-action-preview"></pre><details><summary>Данные запроса и метаданные WB</summary><pre id="wb-action-body"></pre></details><pre id="wb-action-result"></pre><div id="wb-action-events"></div><div class="toolbar"><button id="wb-action-send" type="button">Отправить в WB</button><button id="wb-action-reconcile" class="secondary" type="button">Сверить с WB</button><button id="wb-action-retry" class="secondary" type="button">Сверить и повторить те же коды</button><button id="wb-action-cancel" class="secondary" type="button">Отменить действие</button><button class="secondary wb-close" type="button">Закрыть</button></div></dialog>
 {% endif %}
-<p><a class="chz-link" href="/sellers/{{ seller.id }}/catalog">Единый ассортимент и связи товаров →</a></p>

@@ -3,115 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FBE Flow</title>
+  <title>{{ {'overview':'Рабочее пространство','catalog':'Ассортимент','sales':'Продажи','marking':'Честный Знак','settings':'Настройки'}.get(page, 'FBE Flow') }} · FBE Flow</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/shell.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='/workspace.css') }}">
   <script defer src="{{ url_for('static', path='/shell.js') }}"></script>
+  {% if page == 'overview' %}<script defer src="{{ url_for('static', path='/workspace.js') }}"></script>{% endif %}
+  {% if page == 'settings' %}<script defer src="{{ url_for('static', path='/settings.js') }}"></script>{% endif %}
   {% if page == 'catalog' %}<script defer src="{{ url_for('static', path='/catalog.js') }}"></script>{% endif %}
   {% if page == 'marking' %}<script defer src="{{ url_for('static', path='/marking.js') }}"></script>{% endif %}
-  {% if page in ['wb', 'marketplaces'] and channel == 'wb' %}<script defer src="{{ url_for('static', path='/wb.js') }}"></script>{% endif %}
-  {% if page in ['ozon', 'marketplaces'] and channel == 'ozon' or page == 'store' %}<script defer src="{{ url_for('static', path='/commerce.js') }}"></script>{% endif %}
+  {% if page == 'sales' and channel == 'wb' %}<script defer src="{{ url_for('static', path='/wb.js') }}"></script>{% endif %}
+  {% if page == 'sales' and channel in ['ozon','kit'] %}<script defer src="{{ url_for('static', path='/commerce.js') }}"></script>{% endif %}
 </head>
-<body data-seller-id="{{ seller.id if seller else '' }}">
+<body data-seller-id="{{ seller.id if seller else '' }}" data-seller-name="{{ seller.name if seller else '' }}" data-page="{{ page }}" data-refresh-seconds="{{ ui_preferences.get('refresh_seconds',15) }}" data-density="{{ ui_preferences.get('density','compact') }}" data-operator="{{ ui_preferences.get('operator','') }}">
+  <a href="#main-content" class="skip-link">К содержимому</a>
   <aside class="sidebar">
-    <a class="brand" href="/">FBE <span>Flow</span></a>
-    <p class="caption">Локальная платформа</p>
-    <label for="seller-select">Текущий продавец</label>
-    <select id="seller-select" {% if not sellers %}disabled{% endif %}>
-      {% if not sellers %}<option>Нет продавцов</option>{% endif %}
-      {% for item in sellers %}
-      <option value="{{ item.id }}" {% if seller and item.id == seller.id %}selected{% endif %}>{{ item.name }}</option>
+    <div class="sidebar-brand"><a class="brand" href="/">FBE <span>Flow</span></a><button id="navigation-toggle" class="secondary mobile-menu" type="button" aria-expanded="false" aria-controls="primary-navigation">Меню</button></div>
+    <nav id="primary-navigation" aria-label="Основная навигация">
+      {% for key,label in [('overview','Рабочее пространство'),('catalog','Ассортимент'),('sales','Продажи'),('marking','Честный Знак')] %}
+      {% if seller %}<a href="/sellers/{{ seller.id }}/{{ key }}" {% if page == key %}aria-current="page"{% endif %}>{{ label }}</a>{% else %}<span class="disabled">{{ label }}</span>{% endif %}
       {% endfor %}
-    </select>
-    <button id="add-seller" class="secondary" type="button">Добавить продавца</button>
-    <nav aria-label="Основная навигация">
-      {% for key, label in [('overview', 'Рабочее пространство'), ('catalog', 'Ассортимент'), ('marketplaces', 'Маркетплейсы'), ('store', store_name), ('marking', 'Честный Знак'), ('connections', 'Подключения'), ('operations', 'Операции'), ('settings', 'Настройки')] %}
-      {% if seller %}
-      <a href="/sellers/{{ seller.id }}/{{ key }}" {% if page == key or key == 'marketplaces' and page in ['wb', 'ozon'] %}aria-current="page"{% endif %}>{{ label }}</a>
-      {% else %}<span class="disabled">{{ label }}</span>{% endif %}
-      {% endfor %}
+      {% if seller %}<a class="settings-navigation" href="/sellers/{{ seller.id }}/settings" {% if page == 'settings' %}aria-current="page"{% endif %}>Настройки</a>{% endif %}
     </nav>
-    <div class="sidebar-footer"><span id="worker-status">Проверка состояния…</span><small>FBE Flow · 0.7</small></div>
   </aside>
-  <main>
-    <header><p class="caption">{{ seller.name if seller else 'Первый запуск' }}</p>
-      <h1>{{ store_name if page == 'store' else {'catalog': 'Ассортимент', 'overview': 'Рабочее пространство', 'wb': 'Маркетплейсы', 'ozon': 'Маркетплейсы', 'marketplaces': 'Маркетплейсы', 'marking': 'Честный Знак', 'connections': 'Подключенные системы', 'operations': 'Фоновые операции', 'settings': 'Настройки'}[page] }}</h1>
+  <main id="main-content">
+    <header class="page-header">
+      <h1>{{ {'catalog':'Ассортимент','overview':'Рабочее пространство','sales':'Продажи','marking':'Честный Знак','settings':'Настройки'}.get(page,'FBE Flow') }}</h1>
+      {% if seller %}<div class="header-tools">
+        {% if sellers|length > 1 %}<label class="organization-switch"><span class="sr-only">Организация</span><select id="seller-select" aria-label="Организация">{% for item in sellers %}<option value="{{ item.id }}" {% if item.id == seller.id %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label>{% endif %}
+        <button id="activity-open" class="secondary" type="button">Задачи <span id="activity-count" class="count-badge" hidden></span></button>
+      </div>{% endif %}
     </header>
     <p id="feedback" role="status" hidden></p>
     {% if not seller %}
-    <section class="panel empty"><h2>Начните с продавца</h2><p>Создайте рабочее пространство для своего аккаунта. Подключения и данные будут принадлежать выбранному продавцу.</p><button type="button" id="first-seller">Создать продавца</button></section>
+    <section class="panel empty"><h2>Создайте организацию</h2><p>Затем подключите площадки и Честный Знак в настройках.</p><button type="button" id="first-seller">Создать организацию</button></section>
     {% else %}
-      {% if page in ['overview', 'connections'] %}
-      <section class="panel"><h2>Подключенные системы</h2>
-        {% for connection in connections %}
-        <article class="connection"><h3>{{ connection.name }}</h3><p>{{ connection.adapter_key }} · {{ connection.external_account_id }}</p>
-          {% if connection.adapter_key == 'chz' %}
-          <a class="chz-link" href="/sellers/{{ seller.id }}/marking">Открыть Честный Знак →</a>
-          {% elif connection.adapter_key == 'wb' %}
-          <a class="chz-link" href="/sellers/{{ seller.id }}/marketplaces?channel=wb">Открыть Wildberries FBS →</a>
-          {% elif connection.adapter_key == 'ozon' %}
-          <a class="chz-link" href="/sellers/{{ seller.id }}/marketplaces?channel=ozon">Открыть Ozon FBS →</a>
-          {% elif connection.adapter_key == 'kit' %}
-          <a class="chz-link" href="/sellers/{{ seller.id }}/store">Открыть {{ store_name }} →</a>
-          {% else %}{% for operation in connection.operations %}
-          <button class="queue-operation secondary" type="button" data-connection="{{ connection.id }}" data-operation="{{ operation.key }}">{{ operation.label }}</button>
-          {% else %}<small>Нет доступных операций</small>{% endfor %}{% endif %}
-        </article>
-        {% else %}<p class="muted">Пока нет подключенных систем.</p>{% endfor %}
-      </section>
-      {% endif %}
-      {% if page == 'connections' %}
-      <section class="panel"><h2>Новое подключение</h2>
-        <p><a class="chz-link" href="/sellers/{{ seller.id }}/marking">Подключить Честный Знак →</a></p>
-        <p><a class="chz-link" href="/sellers/{{ seller.id }}/marketplaces?channel=wb">Подключить Wildberries →</a></p>
-        <p><a class="chz-link" href="/sellers/{{ seller.id }}/marketplaces?channel=ozon">Подключить Ozon →</a></p>
-        <p><a class="chz-link" href="/sellers/{{ seller.id }}/store">Подключить интернет-магазин →</a></p>
-        {% set generic_adapters = adapters | rejectattr('key', 'equalto', 'chz') | rejectattr('key', 'equalto', 'wb') | rejectattr('key', 'equalto', 'ozon') | rejectattr('key', 'equalto', 'kit') | list %}
-        {% if generic_adapters %}
-        <form id="connection-form">
-          <label>Система<select name="adapter_key" required>{% for adapter in generic_adapters %}<option value="{{ adapter.key }}">{{ adapter.label }}</option>{% endfor %}</select></label>
-          <label>Название<input name="name" maxlength="120" required></label>
-          <label>Параметры подключения (JSON)<textarea name="config" rows="4" required>{}</textarea></label>
-          <p class="muted">Только параметры без секретов. Порядок авторизации определяется адаптером.</p>
-          <button type="submit">Подключить</button>
-        </form>
-        {% endif %}
-      </section>
-      {% endif %}
+      {% if page == 'overview' %}{% include 'workspace.html' %}{% endif %}
+      {% if page == 'settings' %}{% include 'settings.html' %}{% endif %}
       {% if page == 'catalog' %}{% include 'catalog.html' %}{% endif %}
-      {% if page in ['marking', 'wb', 'ozon', 'marketplaces', 'store'] %}<p><a class="chz-link" href="/sellers/{{ seller.id }}/catalog">Открыть единый ассортимент →</a></p>{% endif %}
       {% if page == 'marking' %}{% include 'marking.html' %}{% endif %}
-      {% if page in ['wb', 'ozon', 'marketplaces'] %}
-      <div class="channel-switch" aria-label="Маркетплейс">
-        <a href="/sellers/{{ seller.id }}/marketplaces?channel=wb" data-marketplace="wb" {% if channel == 'wb' %}aria-current="true"{% endif %}>WB</a>
-        <a href="/sellers/{{ seller.id }}/marketplaces?channel=ozon" data-marketplace="ozon" {% if channel == 'ozon' %}aria-current="true"{% endif %}>Ozon</a>
-      </div>
-      {% if channel == 'wb' %}{% include 'wb.html' %}{% else %}{% set commerce_key = 'ozon' %}{% include 'commerce.html' %}{% endif %}
-      {% endif %}
-      {% if page == 'store' %}
-      <section class="panel"><details><summary>Название блока магазина</summary>
-        <form id="store-name-form"><label>Название<input name="name" maxlength="60" value="{{ store_name }}" required></label><button type="submit">Сохранить название</button></form>
-      </details></section>
-      {% set commerce_key = 'kit' %}{% include 'commerce.html' %}
-      {% endif %}
-      {% if page in ['overview', 'operations'] %}
-      <section class="panel"><h2>Состояние операций</h2><div id="operations-list" aria-live="polite"><p class="muted">Загрузка…</p></div></section>
-      {% endif %}
-      {% if page == 'settings' %}
-      <section class="panel"><h2>Настройки продавца</h2>
-        {% for key, value in settings.items() %}<article class="setting"><strong>{{ key }}</strong><pre>{{ value | tojson(indent=2) }}</pre></article>
-        {% else %}<p class="muted">Пока нет сохраненных настроек.</p>{% endfor %}
-        <form id="settings-form">
-          <label>Ключ настройки<input name="key" maxlength="120" required></label>
-          <label>Значение (JSON)<textarea name="value" rows="3" required></textarea></label>
-          <button type="submit">Сохранить</button>
-        </form>
-      </section>
+      {% if page == 'sales' %}
+      <div class="sales-context" aria-label="Канал продаж"><span class="muted">Маркетплейсы</span><div class="channel-switch">
+        <a href="/sellers/{{ seller.id }}/sales?channel=wb" data-marketplace="wb" {% if channel == 'wb' %}aria-current="true"{% endif %}>WB</a>
+        <a href="/sellers/{{ seller.id }}/sales?channel=ozon" data-marketplace="ozon" {% if channel == 'ozon' %}aria-current="true"{% endif %}>Ozon</a>
+      </div><a class="store-context" href="/sellers/{{ seller.id }}/sales?channel=kit" data-marketplace="kit" {% if channel == 'kit' %}aria-current="true"{% endif %}>{{ store_name }}</a></div>
+      {% if channel == 'wb' %}{% include 'wb.html' %}{% else %}{% set commerce_key = channel %}{% include 'commerce.html' %}{% endif %}
       {% endif %}
     {% endif %}
   </main>
-  <dialog id="seller-dialog"><form id="seller-form">
-    <h2>Новый продавец</h2><label>Название<input name="name" maxlength="120" required autofocus></label>
-    <div class="actions"><button type="button" id="cancel-seller" class="secondary">Отмена</button><button type="submit">Создать</button></div>
-  </form></dialog>
+  <dialog id="seller-dialog"><div class="dialog-heading"><h2>Новая организация</h2><button id="cancel-seller" class="secondary" type="button">Закрыть</button></div><form id="seller-form"><label>Название<input name="name" maxlength="120" required autofocus></label><button type="submit">Создать</button></form></dialog>
+  {% if seller %}<dialog id="activity-dialog" class="activity-dialog"><div class="dialog-heading"><h2>Задачи</h2><button id="activity-close" class="secondary" type="button">Закрыть</button></div><p class="muted">Результаты операций выбранной организации</p><div id="operations-list" aria-live="polite"><p class="muted">Загрузка…</p></div></dialog>{% endif %}
 </body>
 </html>

@@ -5,6 +5,7 @@ from pydantic import JsonValue
 from fbe_flow.core.database import Database
 from fbe_flow.core.errors import InvalidInput
 from fbe_flow.modules.sellers import require_seller
+from fbe_flow.modules.workspace import validate_ui_setting
 
 
 class Settings:
@@ -37,8 +38,11 @@ class Settings:
             not isinstance(value, str) or value not in {"wb", "ozon"}
         ):
             raise InvalidInput("Выберите WB или Ozon")
+        if key == "sales.selected" and value not in ("wb", "ozon", "kit"):
+            raise InvalidInput("Выберите канал продаж")
         with self.db.connection() as conn:
             require_seller(conn, seller_id)
+            value = validate_ui_setting(conn, seller_id, key, value)
             conn.execute(
                 "INSERT INTO settings(seller_id, key, value_json) VALUES (?, ?, ?) "
                 "ON CONFLICT(seller_id, key) DO UPDATE SET value_json = excluded.value_json",

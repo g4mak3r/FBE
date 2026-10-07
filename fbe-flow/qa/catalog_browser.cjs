@@ -44,6 +44,7 @@ async function main() {
     await productForm.locator('[name="tnved"]').fill("3303001000");
     await productForm.locator('[name="okpd2"]').fill("20.42.11");
     await productForm.locator('[name="product_group"]').fill(meta.group);
+    await productForm.getByText("Габариты и упаковка", { exact: true }).click();
     await productForm.locator('[name="length_mm"]').fill("125");
     await productForm.locator('[name="gross_weight_g"]').fill("250");
     await page.locator("#catalog-attribute-new").click();
@@ -151,6 +152,7 @@ async function main() {
     assert.equal((await context.request.get(foreign + "/products/" + created.id)).status(), 404);
     await page.locator("#seller-select").selectOption(meta.other);
     await page.waitForURL("**/sellers/" + meta.other + "/overview");
+    await page.locator("#navigation-toggle").click();
     await page.getByRole("link", { name: "Ассортимент", exact: true }).click();
     await page.getByText("Товаров пока нет", { exact: true }).waitFor();
     assert.equal(await page.getByText("QA-003", { exact: true }).count(), 0);
