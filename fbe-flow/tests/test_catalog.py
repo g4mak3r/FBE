@@ -488,7 +488,7 @@ def test_local_printing_and_application_do_not_change_chz_status(workspace):
 def test_catalog_api_page_assets_and_empty_export_exist(assortment):
     state, client, seller, _ = assortment
     page = client.get(f"/sellers/{seller}/catalog")
-    assert page.status_code == 200 and "Единый ассортимент" in page.text
+    assert page.status_code == 200 and "<h1>Ассортимент</h1>" in page.text
     assert "/static/catalog.js" in page.text and "Ассортимент" in page.text
     assert client.get("/static/catalog.js").status_code == 200
     assert client.get(f"/api/sellers/{seller}/catalog/xlsx/template").status_code == 200

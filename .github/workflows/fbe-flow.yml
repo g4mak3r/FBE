@@ -61,6 +61,7 @@ jobs:
         if: runner.os == 'Linux'
         run: npm --prefix qa ci --ignore-scripts
       - name: Install Chromium
+        id: chromium
         if: runner.os == 'Linux'
         working-directory: fbe-flow/qa
         run: npx playwright install --with-deps chromium
@@ -68,7 +69,7 @@ jobs:
         if: runner.os == 'Linux'
         run: node qa/catalog_browser.cjs
       - name: Workspace browser acceptance
-        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        if: ${{ !cancelled() && runner.os == 'Linux' && steps.chromium.outcome == 'success' }}
         run: node qa/workspace_browser.cjs
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Linux'
