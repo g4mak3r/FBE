@@ -44,7 +44,7 @@ async function main() {
     await productForm.locator('[name="tnved"]').fill("3303001000");
     await productForm.locator('[name="okpd2"]').fill("20.42.11");
     await productForm.locator('[name="product_group"]').fill(meta.group);
-    await productForm.getByText("Габариты и упаковка", { exact: true }).click();
+    await productForm.locator("summary").filter({ hasText: "Габариты и упаковка" }).click();
     await productForm.locator('[name="length_mm"]').fill("125");
     await productForm.locator('[name="gross_weight_g"]').fill("250");
     await page.locator("#catalog-attribute-new").click();

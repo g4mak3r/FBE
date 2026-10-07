@@ -91,6 +91,14 @@ def validate_ui_setting(conn, seller, key, value):
         if len(ids) != len(set(ids)):
             raise InvalidInput("Виджеты должны иметь разные идентификаторы")
         for item in result["widgets"]:
+            allowed = {
+                "codes": {"all", "chz"},
+                "documents": {"all"},
+                "assembly": {"all", "wb", "ozon", "kit"},
+                "shipping": {"all", "wb", "ozon", "kit"},
+            }.get(item["kind"])
+            if allowed and item["channel"] not in allowed:
+                raise InvalidInput("Этот канал не подходит для выбранного виджета")
             if item["warehouse_id"]:
                 warehouse = conn.execute(
                     "SELECT c.adapter_key FROM warehouses w JOIN connections c "

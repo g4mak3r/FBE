@@ -286,7 +286,7 @@
     document.querySelectorAll("#commerce-tabs button").forEach(v => v.classList.toggle("secondary", v !== node));
     refresh().catch(showError);
   });
-  bindForm("commerce-search", fields => { search = fields.get("search"); status = fields.get("status"); stage = fields.get("stage"); warehouse = fields.get("warehouse"); if (stage) kind = "orders"; if (!["orders", "supplies"].includes(kind)) { stage = ""; status = ""; warehouse = ""; } offset = 0; revision++; return refresh(); });
+  bindForm("commerce-search", fields => { search = fields.get("search"); status = fields.get("status"); stage = fields.get("stage"); warehouse = fields.get("warehouse"); if (stage) kind = "orders"; if (!["orders", "supplies"].includes(kind)) { stage = ""; status = ""; warehouse = ""; } offset = 0; revision++; document.querySelectorAll("#commerce-tabs button").forEach(v => v.classList.toggle("secondary", v.dataset.kind !== kind)); return refresh(); });
   for (const [id, delta] of [["commerce-prev", -100], ["commerce-next", 100]]) document.getElementById(id).addEventListener("click", () => { offset = Math.max(0, offset + delta); revision++; refresh().catch(showError); });
   selector.addEventListener("change", () => { connection = selector.value; revision++; offset = 0; warehouse = ""; loadWarehouseFilter().catch(showError); selectedCodes.clear(); links = []; closeDialogs(); refresh().catch(showError); });
   async function refresh() {

@@ -59,8 +59,8 @@
   function renderDraft() {
     const rows = draft.map((widget, index) => {
       const row = node("section", undefined, "widget-editor"); row.append(node("h3", data.available_widgets[widget.kind]));
-      const channels = Object.entries(names).filter(([key]) => !["assembly", "shipping"].includes(widget.kind) || key !== "chz");
-      row.append(select(channels, widget.channel, "Канал виджета", value => { widget.channel = value; widget.warehouse_id = ""; widget.status = ""; renderDraft(); }));
+      const channels = Object.entries(names).filter(([key]) => widget.kind === "codes" ? ["all", "chz"].includes(key) : !["assembly", "shipping"].includes(widget.kind) || key !== "chz");
+      if (widget.kind !== "documents") row.append(select(channels, widget.channel, "Канал виджета", value => { widget.channel = value; widget.warehouse_id = ""; widget.status = ""; renderDraft(); }));
       if (["assembly", "shipping"].includes(widget.kind)) {
         const warehouses = data.warehouses.filter(w => widget.channel === "all" || widget.channel === w.adapter_key);
         row.append(select([["", "Все склады"], ...warehouses.map(w => [w.id, w.name + " · " + names[w.adapter_key]])], widget.warehouse_id, "Склад виджета", value => { widget.warehouse_id = value; }));
