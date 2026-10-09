@@ -46,10 +46,11 @@ def enrich_orders(conn, seller, connection, items):
             "AND external_id=?",
             (seller, connection, str(source.get("nmId"))),
         ).fetchone()
-        photos = (
-            json.loads(remote["attributes_json"]).get("source", {}).get("photos", [])
-            if remote
-            else []
+        card = json.loads(remote["attributes_json"]).get("source", {}) if remote else {}
+        photos = card.get("photos", [])
+        variant = next(
+            (v for v in card.get("sizes", []) if str(v.get("chrtID")) == str(source.get("chrtId"))),
+            None,
         )
         image = next(
             (
@@ -92,11 +93,9 @@ def enrich_orders(conn, seller, connection, items):
             (seller, connection, item["id"]),
         ).fetchall()
         item["packing"] = {
-            "title": product["title"]
-            if product
-            else remote["title"]
-            if remote
-            else source.get("article", "Товар"),
+            "title": remote["title"] if remote else source.get("article", "Товар"),
+            "card_loaded": remote is not None,
+            "variant": variant,
             "image": image,
             "product_id": product["id"] if product else None,
             "quantity": product.get("package_quantity") if product else None,

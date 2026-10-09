@@ -1,0 +1,38 @@
+/* WB assembly: compact rows, with the selected-order actions beside the list. */
+#wb-stages.assembly-tabs {display:flex;gap:6px;margin:0 0 14px;border-bottom:1px solid #dde3ea;padding-bottom:8px}
+.assembly-tabs button {background:transparent;color:#556174;border:0;border-radius:8px;padding:10px 15px;box-shadow:none}
+.assembly-tabs button[aria-current="true"] {background:#e9efff;color:#244ec4}
+.assembly-tabs span {margin-left:8px;font-variant-numeric:tabular-nums}
+.fulfillment-workbench .packing-layout:has(.packing-panel[hidden]) {grid-template-columns:minmax(0,1fr)}
+.fulfillment-workbench .order-surface table {display:table;width:100%;table-layout:auto}
+.fulfillment-workbench .order-surface #wb-records {display:table-row-group}
+.fulfillment-workbench #wb-head {display:none}
+.fulfillment-workbench #wb-records .order-card {display:table-row!important;border:0;border-radius:0;box-shadow:none}
+.fulfillment-workbench #wb-records .order-card>td {display:grid;grid-template-columns:120px minmax(230px,1fr) 160px;gap:6px 16px;padding:9px 12px;border-bottom:1px solid #e6eaf0!important;align-items:center}
+.fulfillment-workbench .order-top {display:grid;grid-template-columns:18px 1fr;gap:3px 8px;margin:0;align-items:center}
+.fulfillment-workbench .order-top small {grid-column:2;color:#667085;font-size:12px;margin:0}
+.fulfillment-workbench .order-number {font-size:12px;padding:0;text-align:left}
+.fulfillment-workbench .order-product {display:flex;align-items:center;gap:10px;min-width:0;margin:0}
+.fulfillment-workbench .product-thumb {width:38px;height:48px;flex:0 0 38px;border-radius:5px;font-size:9px;text-align:center;color:#7c8799;background:#f2f4f7;overflow:hidden}
+.fulfillment-workbench .product-thumb img {width:100%;height:100%;object-fit:contain}
+.fulfillment-workbench .order-product h3 {font-size:13px;line-height:1.35;margin:0 0 3px}
+.fulfillment-workbench .order-product small {font-size:11px;line-height:1.4}
+.fulfillment-workbench .order-details-row {display:flex;flex-direction:column;gap:3px;align-items:flex-start;margin:0;font-size:11px}
+.fulfillment-workbench .order-badges {grid-column:2/-1;gap:4px;margin:0}
+.fulfillment-workbench .order-badge {font-size:10px;padding:2px 5px}
+.fulfillment-workbench .order-badges:empty,.fulfillment-workbench .wb-marking-cell:empty {display:none}
+.fulfillment-workbench .wb-marking-cell {grid-column:2/-1;margin:0}
+.fulfillment-workbench .wb-marking-cell button {padding:3px 7px;font-size:11px}
+.fulfillment-workbench #wb-records .supply-card {display:table-row!important;border:0;border-radius:0;box-shadow:none}
+.fulfillment-workbench #wb-records .supply-card td {display:table-cell;padding:12px;border-bottom:1px solid #e6eaf0!important;vertical-align:middle}
+.fulfillment-workbench .supply-card h3 {font-size:14px;margin:0 0 4px}
+.fulfillment-workbench .supply-card small {display:block;font-size:11px;color:#667085}
+.fulfillment-workbench .supply-actions button {font-size:11px;padding:6px 8px;margin:3px}
+.fulfillment-workbench .order-card.is-selected {background:#f0f5ff}
+.fulfillment-workbench [hidden] {display:none!important}
+@media(max-width:760px) {
+  .fulfillment-workbench #wb-records .order-card>td {grid-template-columns:92px minmax(150px,1fr);gap:5px 8px;padding:8px}
+  .fulfillment-workbench .order-details-row {grid-column:2;flex-direction:row;flex-wrap:wrap}
+  .fulfillment-workbench .packing-layout {grid-template-columns:minmax(0,1fr)}
+  #wb-stages.assembly-tabs {gap:0}.assembly-tabs button {padding:9px;font-size:12px}
+}

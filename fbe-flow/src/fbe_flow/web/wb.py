@@ -124,6 +124,11 @@ def sync(request: Request, seller_id: str, connection_id: str):
     return request.app.state.fulfillment.start_sync(seller_id, connection_id)
 
 
+@router.post("/{connection_id}/refresh", status_code=202)
+def refresh(request: Request, seller_id: str, connection_id: str):
+    return request.app.state.fulfillment.ensure_refresh(seller_id, connection_id)
+
+
 @router.get("/{connection_id}/records/{kind}")
 def records(
     request: Request,
@@ -137,9 +142,20 @@ def records(
     stage: Annotated[str, Query(max_length=30)] = "",
     status: Annotated[str, Query(max_length=100)] = "",
     warehouse: Annotated[str, Query(max_length=120)] = "",
+    queue: Literal["", "new", "current", "archive"] = "",
 ):
     return request.app.state.fulfillment.records(
-        seller_id, connection_id, kind, offset, limit, search, supply, stage, status, warehouse
+        seller_id,
+        connection_id,
+        kind,
+        offset,
+        limit,
+        search,
+        supply,
+        stage,
+        status,
+        warehouse,
+        queue,
     )
 
 

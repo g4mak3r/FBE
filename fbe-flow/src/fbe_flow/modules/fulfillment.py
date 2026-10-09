@@ -63,6 +63,36 @@ def decode_action(row):
     return value
 
 
+def queue_predicate(kind, queue):
+    if queue not in {"", "new", "current", "archive"}:
+        raise InvalidInput("Неизвестный раздел сборки")
+    if not queue or kind not in {"orders", "supplies"}:
+        return ""
+    current = (
+        "status IN ('open','closed') AND json_extract(attributes_json,'$.source.scanDt') IS NULL"
+    )
+    if kind == "supplies":
+        return " AND " + current if queue == "current" else ""
+    fbs = " AND json_extract(attributes_json,'$.source.deliveryType')='fbs'"
+    if queue == "new":
+        return (
+            fbs
+            + " AND status='new' AND supply_external_id IS NULL AND "
+            + ("NULLIF(json_extract(attributes_json,'$.source.supplyId'),'') IS NULL")
+        )
+    if queue == "current":
+        return (
+            fbs
+            + " AND status IN ('confirm','complete') AND EXISTS (SELECT 1 FROM supplies s "
+            + (
+                "WHERE s.seller_id=orders.seller_id AND s.connection_id=orders.connection_id "
+                "AND s.external_id=orders.supply_external_id AND s.status IN ('open','closed') "
+                "AND json_extract(s.attributes_json,'$.source.scanDt') IS NULL)"
+            )
+        )
+    return fbs
+
+
 class Fulfillment:
     def __init__(self, database, connections, operations, registry, marking):
         self.db, self.connections, self.operations = database, connections, operations
@@ -128,7 +158,21 @@ class Fulfillment:
                     (seller, connection),
                 )
             }
+        with self.db.connection() as conn:
+            queues = {
+                queue: conn.execute(
+                    f"SELECT count(*) FROM {kind} WHERE seller_id=? AND connection_id=?"
+                    + queue_predicate(kind, queue),
+                    (seller, connection),
+                ).fetchone()[0]
+                for queue, kind in (
+                    ("new", "orders"),
+                    ("current", "supplies"),
+                    ("archive", "orders"),
+                )
+            }
         return {
+            "queues": queues,
             "stages": stages,
             "parameters": {
                 "tin": value["config"]["tin"],
@@ -151,6 +195,7 @@ class Fulfillment:
         stage="",
         status="",
         warehouse="",
+        queue="",
     ):
         self._connection(seller, connection)
         if kind not in KINDS or offset < 0 or not 1 <= limit <= 200 or len(search) > 150:
@@ -170,9 +215,21 @@ class Fulfillment:
                 raise InvalidInput("Фильтр поставки доступен для заданий")
             predicate += " AND supply_external_id=?"
             args.append(supply)
+        predicate += queue_predicate(kind, queue)
+        if kind == "supplies" and warehouse:
+            predicate += (
+                " AND EXISTS (SELECT 1 FROM orders o WHERE o.seller_id=supplies.seller_id "
+                "AND o.connection_id=supplies.connection_id "
+                "AND o.supply_external_id=supplies.external_id AND o.warehouse_external_id=?)"
+            )
+            args.append(warehouse)
+            warehouse = ""
         extra, values = sales_predicate("wb", kind, stage, status, warehouse)
         predicate += extra
         args.extend(values)
+        ordering = "updated_at DESC,external_id,id"
+        if kind == "orders":
+            ordering = "json_extract(attributes_json,'$.source.createdAt'),external_id,id"
         with self.db.connection() as conn:
             total = conn.execute(f"SELECT count(*) FROM {kind} WHERE {predicate}", args).fetchone()[
                 0
@@ -180,11 +237,17 @@ class Fulfillment:
             items = [
                 decode_record(r)
                 for r in conn.execute(
-                    f"SELECT * FROM {kind} WHERE {predicate} "
-                    "ORDER BY updated_at DESC,external_id,id LIMIT ? OFFSET ?",
+                    f"SELECT * FROM {kind} WHERE {predicate} ORDER BY {ordering} LIMIT ? OFFSET ?",
                     (*args, limit, offset),
                 )
             ]
+            if kind == "supplies":
+                for item in items:
+                    item["order_count"] = conn.execute(
+                        "SELECT count(*) FROM orders WHERE seller_id=? AND connection_id=? "
+                        "AND supply_external_id=?",
+                        (seller, connection, item["external_id"]),
+                    ).fetchone()[0]
             if kind == "orders":
                 for item in items:
                     assignments = conn.execute(
@@ -206,7 +269,36 @@ class Fulfillment:
             conn.execute("BEGIN IMMEDIATE")
             return self._start_sync(conn, seller, connection)
 
-    def _start_sync(self, conn, seller, connection):
+    def ensure_refresh(self, seller, connection):
+        self._connection(seller, connection)
+        with self.db.connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            active = conn.execute(
+                "SELECT id FROM operations WHERE seller_id=? AND connection_id=? "
+                "AND operation_key='wb.sync' AND status IN ('queued','running')",
+                (seller, connection),
+            ).fetchone()
+            if active:
+                return {"state": "running", "id": active[0]}
+            snapshots = {
+                v[0]: json.loads(v[1])
+                for v in conn.execute(
+                    "SELECT key,value_json FROM wb_snapshots WHERE seller_id=? AND connection_id=?",
+                    (seller, connection),
+                )
+            }
+            now = int(time.time())
+            cooldown = (
+                300 if snapshots.get("sync", {}).get("state") in {"failed", "interrupted"} else 60
+            )
+            if now - snapshots.get("auto_refresh", {}).get("at", 0) < cooldown:
+                return {"state": "cooldown"}
+            refs = now - snapshots.get("references", {}).get("at", 0) >= 3600
+            result = self._start_sync(conn, seller, connection, auto=True, references=refs)
+            self.snapshot(conn, seller, connection, "auto_refresh", {"at": now})
+            return {**result, "state": "queued"}
+
+    def _start_sync(self, conn, seller, connection, auto=False, references=True):
         if conn.execute(
             "SELECT 1 FROM operations WHERE seller_id=? AND connection_id=? AND "
             "operation_key='wb.sync' AND status IN ('queued','running')",
@@ -216,7 +308,9 @@ class Fulfillment:
         run = str(uuid4())
         end = int(time.time())
         payload = {
-            "phase": "warehouses",
+            "phase": "new" if auto else "warehouses",
+            "auto": auto,
+            "references": references,
             "run_id": run,
             "page": 0,
             "date_from": end - 30 * 86400,
@@ -859,6 +953,23 @@ class Fulfillment:
                 ).fetchone()
                 if not row or json.loads(row[0]).get("run_id") != payload.get("run_id"):
                     raise InvalidInput("Запустите синхронизацию из раздела Wildberries")
+            if payload.get("phase") == "new" and payload.get("auto"):
+                with self.db.connection() as conn:
+                    cached = [
+                        json.loads(v[0]).get("source", {})
+                        for v in conn.execute(
+                            "SELECT attributes_json FROM orders WHERE seller_id=? "
+                            "AND connection_id=? "
+                            "AND (status IN ('new','confirm') OR (status='complete' "
+                            "AND EXISTS (SELECT 1 FROM supplies s "
+                            "WHERE s.seller_id=orders.seller_id "
+                            "AND s.connection_id=orders.connection_id "
+                            "AND s.external_id=orders.supply_external_id "
+                            "AND s.status IN ('open','closed'))))",
+                            (context.seller_id, context.connection_id),
+                        )
+                    ]
+                payload = {**payload, "cached_orders": cached}
             result = adapter.execute(context, key, payload)
             # Deleted warehouses and older supplies need not be returned by WB. Keep their raw IDs.
             with self.db.connection() as conn:
@@ -1044,11 +1155,15 @@ class Fulfillment:
                 "sync",
                 {**progress, "counts": counts, "state": "running" if following else "succeeded"},
             )
+            if progress["phase"] == "products" and following and following["phase"] != "products":
+                self.snapshot(conn, seller, connection, "references", {"at": int(time.time())})
             if following:
                 if progress["page"] >= 2000:
                     raise Conflict("Достигнут предел страниц WB; сузьте область данных")
                 payload = {
                     **following,
+                    "auto": progress.get("auto", False),
+                    "references": progress.get("references", True),
                     "run_id": progress["run_id"],
                     "page": progress["page"] + 1,
                     "date_from": progress["date_from"],

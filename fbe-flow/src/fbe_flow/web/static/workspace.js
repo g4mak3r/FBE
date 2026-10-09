@@ -61,7 +61,7 @@
   }
   async function recentOrders() {
     const connections = (await api(sellerApi + "/connections")).filter(v=>v.adapter_key === "wb");
-    const results = await Promise.all(connections.map(async connection=>({connection,page:await api(`${sellerApi}/wb/${encodeURIComponent(connection.id)}/records/orders?status=new&limit=4`)})));
+    const results = await Promise.all(connections.map(async connection=>({connection,page:await api(`${sellerApi}/wb/${encodeURIComponent(connection.id)}/records/orders?queue=new&limit=4`)})));
     const entries = results.flatMap(({connection,page})=>page.items.map(item=>({connection,item}))).slice(0,8);
     document.getElementById("workspace-orders").hidden = !entries.length;
     document.getElementById("workspace-recent-orders").replaceChildren(...entries.map(({connection,item})=>{

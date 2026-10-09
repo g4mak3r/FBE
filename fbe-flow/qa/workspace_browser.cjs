@@ -58,7 +58,7 @@ async function main() {
     await page.waitForFunction(() => document.getElementById("wb-supply-select").options.length > 1);
     await page.locator("#wb-search .filter-menu > summary").click();
     assert.equal(await page.locator('#wb-search [name="warehouse"]').inputValue(), wbWarehouse.external_id);
-    assert.equal(await page.locator('#wb-search [name="status"]').inputValue(), "new");
+    assert.equal(await page.locator('#wb-search [name="status"]').inputValue(), "");
     await page.locator("#wb-search .filter-menu > summary").click();
     await page.getByRole("button", { name: "#101", exact: true }).click();
     await page.locator("#wb-order-dialog .action-context").getByText(/Проверка ассортимента/).waitFor();

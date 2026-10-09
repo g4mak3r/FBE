@@ -449,11 +449,21 @@ class WbAdapter:
             elif phase == "supplies":
                 following = {"phase": "orders", "next": 0}
             else:
-                following = {"phase": "new"}
+                following = None if payload.get("auto") else {"phase": "new"}
         elif phase == "new":
             items = collection(
                 self._call(config, "marketplace", "GET", "/api/v3/orders/new"), "orders"
             )
+            if payload.get("auto"):
+                # Recheck cached active orders even if older than the history window.
+                merged = {str(v["id"]): v for v in payload.get("cached_orders", [])}
+                merged.update({str(v["id"]): v for v in items})
+                items = list(merged.values())
+                following = (
+                    {"phase": "warehouses"}
+                    if payload.get("references")
+                    else {"phase": "supplies", "next": 0}
+                )
             statuses = (
                 self.statuses(config, [int(integer(v.get("id"))) for v in items]) if items else {}
             )
@@ -467,6 +477,8 @@ class WbAdapter:
             data={
                 "sync": {
                     "run_id": payload["run_id"],
+                    "auto": payload.get("auto", False),
+                    "references": payload.get("references", True),
                     "phase": phase,
                     "following": following,
                     "count": len(items),

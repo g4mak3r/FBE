@@ -47,7 +47,7 @@ function flowView(channel) {
   let stored = {};
   try { stored = JSON.parse(sessionStorage.getItem("fbe:view:" + sellerId + ":" + channel) || "{}"); } catch {}
   const result = {...stored};
-  for (const key of ["connection", "kind", "stage", "status", "warehouse", "search", "offset"]) {
+  for (const key of ["connection", "kind", "stage", "status", "warehouse", "search", "offset", "queue", "supply"]) {
     if (pageQuery.has(key)) result[key] = pageQuery.get(key);
   }
   return result;

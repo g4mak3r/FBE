@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ {'overview':'Рабочее пространство','catalog':'Ассортимент','sales':'Продажи','marking':'Честный Знак','settings':'Настройки'}.get(page, 'FBE Flow') }} · FBE Flow</title>
+  <title>{{ {'overview':'Рабочее пространство','catalog':'Ассортимент','sales':'Сборка','marking':'Честный Знак','settings':'Настройки'}.get(page, 'FBE Flow') }} · FBE Flow</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/shell.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='/workspace.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='/packing.css') }}">
@@ -15,6 +15,7 @@
   {% if page == 'marking' %}<script defer src="{{ url_for('static', path='/marking.js') }}"></script>{% endif %}
   {% if page == 'sales' and channel == 'wb' %}<script defer src="{{ url_for('static', path='/wb.js') }}"></script>{% endif %}
   {% if page == 'sales' and channel in ['ozon','kit'] %}<script defer src="{{ url_for('static', path='/commerce.js') }}"></script>{% endif %}
+  <link rel="stylesheet" href="{{ url_for('static', path='/assembly.css') }}">
 </head>
 <body data-seller-id="{{ seller.id if seller else '' }}" data-seller-name="{{ seller.name if seller else '' }}" data-page="{{ page }}" data-refresh-seconds="{{ ui_preferences.get('refresh_seconds',15) }}" data-density="{{ ui_preferences.get('density','compact') }}" data-operator="{{ ui_preferences.get('operator','') }}">
   <a href="#main-content" class="skip-link">К содержимому</a>
@@ -22,7 +23,7 @@
     <div class="sidebar-brand"><a class="brand" href="/">FBE <span>Flow</span></a><button id="navigation-toggle" class="secondary mobile-menu" type="button" aria-expanded="false" aria-controls="primary-navigation">Меню</button></div>
     {% set nav_icons = {'overview':'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z','catalog':'m12 3 9 5v8l-9 5-9-5V8z M3 8l9 5 9-5 M12 13v8','sales':'M4 5h16v15H4z M8 5V3h8v2 M8 10h8 M8 14h5','marking':'M8 3H3v5 M16 3h5v5 M21 16v5h-5 M8 21H3v-5 M7 8v8 M11 8v8 M15 8v8 M18 8v8'} %}
     <nav id="primary-navigation" aria-label="Основная навигация">
-      {% for key,label in [('overview','Рабочее пространство'),('catalog','Ассортимент'),('sales','Продажи'),('marking','Честный Знак')] %}
+      {% for key,label in [('overview','Рабочее пространство'),('catalog','Ассортимент'),('sales','Сборка'),('marking','Честный Знак')] %}
       {% if seller %}<a href="/sellers/{{ seller.id }}/{{ key }}" {% if page == key %}aria-current="page"{% endif %}><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ nav_icons[key] }}"/></svg><span>{{ label }}</span></a>{% else %}<span class="disabled">{{ label }}</span>{% endif %}
       {% endfor %}
       {% if seller %}<a class="settings-navigation" href="/sellers/{{ seller.id }}/settings" {% if page == 'settings' %}aria-current="page"{% endif %}><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M4 17h16 M8 4v6 M16 14v6"/></svg><span>Настройки</span></a>{% endif %}
@@ -30,7 +31,7 @@
   </aside>
   <main id="main-content">
     <header class="page-header">
-      <h1>{{ {'catalog':'Ассортимент','overview':'Рабочее пространство','sales':'Продажи','marking':'Честный Знак','settings':'Настройки'}.get(page,'FBE Flow') }}</h1>
+      <h1>{{ {'catalog':'Ассортимент','overview':'Рабочее пространство','sales':'Сборка','marking':'Честный Знак','settings':'Настройки'}.get(page,'FBE Flow') }}</h1>
       {% if seller %}<div class="header-tools">
         {% if sellers|length > 1 %}<label class="organization-switch"><span class="sr-only">Организация</span><select id="seller-select" aria-label="Организация">{% for item in sellers %}<option value="{{ item.id }}" {% if item.id == seller.id %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label>{% endif %}
         <button id="activity-open" class="secondary" type="button">Задачи <span id="activity-count" class="count-badge" hidden></span></button>
