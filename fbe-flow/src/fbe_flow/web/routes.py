@@ -275,3 +275,18 @@ def records(
 @router.get("/api/sellers/{seller_id}/records/{kind}/{record_id}")
 def record(request: Request, seller_id: str, kind: Kind, record_id: str):
     return request.app.state.records.get(seller_id, kind, record_id)
+
+
+@router.get("/sellers/{seller_id}/printing/wb/{job_id}")
+def wb_print_page(request: Request, seller_id: str, job_id: str):
+    from fbe_flow.modules.packing import print_job
+
+    state = request.app.state
+    seller = state.sellers.get(seller_id)
+    job = print_job(state.fulfillment, seller_id, job_id)
+    return state.templates.TemplateResponse(
+        request=request,
+        name="packing_print.html",
+        context={"seller": seller, "job": job},
+        headers={"Cache-Control": "no-store"},
+    )

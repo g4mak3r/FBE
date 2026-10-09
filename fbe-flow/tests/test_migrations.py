@@ -70,7 +70,7 @@ def test_upgrade_from_v1_preserves_records_queue_and_success_counts(tmp_path):
     scoped = operations.enqueue(first, connection, "fetch", {}, scope_key="specific-target")
     assert scoped["scope_key"] == "specific-target"
     with db.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     # Reopening an upgraded DB must neither wrap the results twice nor replay any job.
     db.initialize()

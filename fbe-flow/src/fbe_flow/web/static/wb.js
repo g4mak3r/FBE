@@ -28,12 +28,14 @@
     field.replaceChildren(prompt, ...page.items.map(v => { const option = make("option", v.name); option.value = v.external_id; return option; }));
     if (warehouse && ![...field.options].some(v => v.value === warehouse)) { const option = make("option", "Склад " + warehouse); option.value = warehouse; field.append(option); }
     field.value = warehouse;
+    document.getElementById("wb-warehouse-chips").replaceChildren(...[["","Все склады"],...warehouseNames].map(([value,label])=>{const button=clickButton(label,async()=>{warehouse=value;field.value=value;offset=0;selected.clear();revision++;await refresh();document.querySelectorAll("#wb-warehouse-chips button").forEach(v=>v.setAttribute("aria-pressed",String(v.dataset.warehouse===warehouse)));});button.dataset.warehouse=value;button.setAttribute("aria-pressed",String(value===warehouse));return button;}));
   }
   let links = [], parameters = {}, currentAction = null, product = null, currentOrder = null;
+  let pageItems = [], supplyItems = [], deliverySupply = null;
   let nkOffset = 0, nkPage = [], codeOffset = 0, refreshSequence = 0;
   const selected = new Map(), selectedCodes = new Set();
   const base = () => `${root}/${encodeURIComponent(connection)}`;
-  const actionNames = { sgtin: "Передача кодов ЧЗ", supply_create: "Создание поставки", supply_add: "Состав поставки", supply_deliver: "Передача в доставку", supply_delete: "Удаление пустой поставки" };
+  const actionNames = { expiration: "Срок годности", sgtin: "Передача кодов ЧЗ", supply_create: "Создание поставки", supply_add: "Состав поставки", supply_deliver: "Передача в доставку", supply_delete: "Удаление пустой поставки" };
   const actionStates = { draft: "Подготовлено", queued: "В очереди", submitting: "Отправляется", accepted: "WB принял запрос", pending: "Ожидает подтверждения WB", confirmed: "Подтверждено WB", rejected: "Отклонено", unknown: "Ответ потерян — требуется сверка", conflict: "Результат расходится — требуется проверка", partial: "Часть заданий добавлена", cancelled: "Отменено" };
   const syncStates = {queued: "В очереди", running: "Обновляется", succeeded: "Обновлено", failed: "Ошибка чтения", interrupted: "Чтение прервано"};
   const orderStates = { new: "Новое", confirm: "На сборке", complete: "В доставке", cancel: "Отменено" };
@@ -57,6 +59,7 @@
     document.getElementById("wb-order-source").textContent = JSON.stringify(item.attributes, null, 2);
     dialog.showModal();
   }
+  if (!view.status && !view.stage && kind === "orders") { status = "new"; filterForm.elements.status.value = status; }
   statusOptions();
   const syncPhases = { warehouses: "Склады", products: "Товары", supplies: "Поставки", orders: "История заданий", new: "Новые задания" };
   const closeDialogs = () => { document.querySelectorAll('dialog[id^="wb-"]').forEach(v => v.close()); currentAction = null; };
@@ -71,9 +74,21 @@
     return button;
   }
   function selectionCount() {
-    document.getElementById("wb-selection").textContent = `${selected.size} заданий выбрано`;
+    document.getElementById("wb-selection").textContent = selected.size ? `${selected.size} заказов выбрано` : "Выберите заказы";
+    document.getElementById("packing-empty").hidden = selected.size > 0;
+    const values = [...selected.values()], assembling = values.length > 0 && values.every(v => v.status === "confirm");
+    for (const id of ["packing-expiration", "packing-codes"]) document.getElementById(id).disabled = !assembling || !!parameters.read_only;
+    document.getElementById("packing-labels").disabled = !assembling;
+    document.getElementById("packing-print-codes").disabled = !assembling || !values.every(v => v.marking.length && v.marking.every(c => c.state === "confirmed"));
+    document.getElementById("packing-help").textContent = selected.size ? "Пройдите шаги сверху вниз. Результаты сохраняются для каждого заказа." : "Отметьте нужные карточки или выберите всю страницу.";
+    document.getElementById("packing-expiry-status").textContent = `${values.filter(v => v.packing?.expiration?.state === "confirmed").length} из ${values.length} · подтверждено WB`;
+    document.getElementById("packing-label-status").textContent = `${values.filter(v => v.packing?.printed.includes("orders")).length} из ${values.length} · печать подтверждена`;
+    document.getElementById("packing-code-status").textContent = `${values.filter(v => v.marking.length && v.marking.every(c => c.state === "confirmed")).length} из ${values.length} · КИЗы приняты WB`;
+    const eligible = pageItems.filter(v => ["new", "confirm"].includes(v.status) && v.attributes.source?.deliveryType === "fbs");
+    const all = document.getElementById("wb-select-page"); all.checked = eligible.length > 0 && eligible.every(v => selected.has(v.id)); all.indeterminate = !all.checked && eligible.some(v => selected.has(v.id));
+    document.querySelectorAll(".order-card").forEach(v => v.classList.toggle("is-selected", selected.has(v.dataset.orderId)));
     document.getElementById("wb-order-tools").hidden = kind !== "orders" || !selected.size;
-    document.getElementById("wb-add-orders").disabled = !selected.size || !!parameters.read_only;
+    document.getElementById("wb-add-orders").disabled = !selected.size || !document.getElementById("wb-supply-select").value || !!parameters.read_only;
   }
   async function prepare(actionKind, payload) {
     const version = revision, endpoint = base();
@@ -90,6 +105,7 @@
     const body = action.body;
     document.getElementById("wb-action-preview").textContent = action.kind === "sgtin"
       ? `Задание #${body.order_external_id} · GTIN ${body.gtin} · Группа ${body.product_group}\n${body.cis.length} кодов:\n${body.cis.join("\n")}`
+      : action.kind === "expiration" ? `Задание #${body.order_external_id} · ${body.expiration} · ${body.batch_name}`
       : action.kind === "supply_create" ? `Новая поставка: ${body.name}\nНазвание в WB: ${body.remote_name}`
       : `Поставка ${body.supply_id}${body.orders ? `\nЗадания: ${body.orders.join(", ")}` : ""}`;
     document.getElementById("wb-action-body").textContent = JSON.stringify(body, null, 2);
@@ -120,6 +136,8 @@
     });
   }
   function renderRecords(page) {
+    pageItems = page.items;
+    document.querySelector(".select-page").hidden = kind !== "orders";
     const labels = { products: ["Товар", "Размеры / штрихкоды", "Честный Знак"], warehouses: ["Склад", "ID", "Источник"],
       orders: ["Выбрать", "Задание", "Статус", "Поставка / склад", "Коды ЧЗ"], supplies: ["Поставка", "Статус", "Действия"] };
     const head = make("tr"); head.append(...labels[kind].map(v => make("th", v)));
@@ -135,26 +153,34 @@
       } else if (kind === "warehouses") {
         row.append(make("td", item.name), make("td", item.external_id), make("td", "Wildberries"));
       } else if (kind === "orders") {
+        row.className = "order-card"; row.dataset.orderId = item.id;
         const cell = make("td"), checkbox = make("input"); checkbox.type = "checkbox"; checkbox.checked = selected.has(item.id); checkbox.setAttribute("aria-label", `Выбрать задание ${item.external_id}`);
         checkbox.disabled = !["new", "confirm"].includes(item.status) || source.deliveryType !== "fbs";
         if (checkbox.disabled) { selected.delete(item.id); checkbox.checked = false; } else if (selected.has(item.id)) selected.set(item.id, item);
-        checkbox.addEventListener("change", () => { if (checkbox.checked) selected.set(item.id, item); else selected.delete(item.id); selectionCount(); }); cell.append(checkbox);
-        const title = make("td"); title.append(clickButton(`#${item.external_id}`, () => orderDetails(item)), make("small", source.article || "Без артикула"));
-        const status = make("td", orderStates[item.status] || item.status); status.append(make("small", `WB: ${item.attributes.wb_status || "—"}`));
-        const sourceCell = make("td", item.supply_external_id || "Без поставки"); sourceCell.append(make("small", warehouseNames.get(String(item.warehouse_external_id)) || "Склад " + (item.warehouse_external_id || "—")));
-        const marking = make("td", undefined, "wb-marking-cell");
-        if (item.marking.length) for (const value of item.marking) marking.append(clickButton(value.code, () => openAction(value.action_id)));
-        else {
-          const assign = clickButton("Назначить коды", () => openCodes(item));
-          assign.disabled = item.status !== "confirm" || !!parameters.read_only;
-          marking.append(assign);
-          if (item.status === "new") marking.append(make("small", "Сначала добавьте задание в поставку"));
-        }
-        row.append(cell, title, status, sourceCell, marking);
+        checkbox.addEventListener("change", () => { if (checkbox.checked) selected.set(item.id, item); else selected.delete(item.id); selectionCount(); });
+        const top = make("div", undefined, "order-top"), number = clickButton(`#${item.external_id}`, () => orderDetails(item)); number.className = "order-number";
+        top.append(checkbox, number);
+        if (source.createdAt) top.append(make("small", new Date(source.createdAt).toLocaleDateString("ru-RU", {day:"numeric",month:"short"})));
+        const productRow = make("div", undefined, "order-product"), thumb = make("div", "▧", "product-thumb"), copy = make("div");
+        if (item.packing?.image) { const img = make("img"); img.src = item.packing.image; img.alt = ""; img.loading = "lazy"; img.referrerPolicy = "no-referrer"; img.addEventListener("error",()=>img.remove(),{once:true}); thumb.replaceChildren(img); }
+        copy.append(make("h3", item.packing?.title || source.article || "Товар"), make("small", `${source.article || "Без артикула"}${source.color ? " · " + source.color : ""}`)); productRow.append(thumb, copy);
+        const detail = make("div", undefined, "order-details-row"); detail.append(make("span", warehouseNames.get(String(item.warehouse_external_id)) || "Склад не указан"), make("span", orderStates[item.status] || item.status, "order-status"));
+        const badges = make("div", undefined, "order-badges"), expiry = item.packing?.expiration;
+        if (item.supply_external_id) { const supply = supplyItems.find(v=>v.external_id === item.supply_external_id); badges.append(make("span", cleanSupplyName(supply?.attributes.source?.name || item.supply_external_id), "order-badge")); }
+        if (expiry) badges.append(make("span", `Годен до ${expiry.expiration}`, "order-badge " + (expiry.state === "confirmed" ? "ready" : "attention")));
+        if (item.packing?.printed.includes("orders")) badges.append(make("span", "✓ Этикетка", "order-badge ready"));
+        if (!item.packing?.product_id) badges.append(make("span", "Нет связи с ассортиментом", "order-badge attention"));
+        const marking = make("div", undefined, "wb-marking-cell");
+        if (item.marking.length) {
+          const ok = item.marking.every(v=>v.state === "confirmed");
+          marking.append(clickButton(ok ? `✓ КИЗы приняты · ${item.marking.length}` : `КИЗы · ${actionStates[item.marking[0].state] || "Ожидаем"}`, () => openAction(item.marking[0].action_id)));
+        } else if (item.status === "confirm") { const assign = clickButton("Выбрать КИЗы вручную", () => openCodes(item)); assign.disabled = !!parameters.read_only; marking.append(assign); }
+        cell.append(top, productRow, detail, badges, marking); row.append(cell);
       } else {
-        const title = make("td", source.name || item.external_id); title.append(make("small", item.external_id));
+        row.className = "supply-card";
+        const title = make("td"); title.append(make("h3", cleanSupplyName(source.name || item.external_id)), make("small", item.external_id));
         const status = make("td", supplyStates[item.status] || item.status);
-        const actions = make("td");
+        const actions = make("td", undefined, "supply-actions");
         actions.append(clickButton("Состав", async () => {
           const version = revision, result = await api(`${base()}/supplies/${item.id}/details`);
           if (version !== revision) return;
@@ -169,9 +195,10 @@
         }));
         if (item.status === "open" && !parameters.read_only) {
           actions.append(clickButton("Выбрать для заданий", () => { selectSupply(item); setKind("orders"); }));
-          actions.append(clickButton("Передать в доставку", () => prepare("supply_deliver", { supply_id: item.id })));
+          actions.append(clickButton("Проверить и отгрузить", () => openDelivery(item), false));
           actions.append(clickButton("Удалить пустую", () => prepare("supply_delete", { supply_id: item.id })));
         }
+        if (["closed", "scanned"].includes(item.status)) actions.append(clickButton("Распечатать QR поставки", () => printLabels("supply", item.id), false));
         row.append(title, status, actions);
       }
       return row;
@@ -198,7 +225,9 @@
       api(`${endpoint}/links`), api(`${endpoint}/actions`), api(`${endpoint}/records/supplies?limit=200`),
     ]);
     if (sequence !== refreshSequence || version !== revision || activeKind !== kind || activeOffset !== offset || activeSearch !== search) return;
-    parameters = overview.parameters; links = newLinks;
+    parameters = overview.parameters; links = newLinks; supplyItems = supplies.items;
+    for (const field of document.querySelectorAll("[data-stage-count]")) field.textContent = field.dataset.stageCount === "supplies" ? overview.counts.supplies : overview.stages?.[field.dataset.stageCount] || 0;
+    document.querySelectorAll("[data-order-status]").forEach(v => v.setAttribute("aria-current", String(v.dataset.orderStatus === (kind === "supplies" ? "supplies" : status || "new"))));
     document.querySelector('#wb-create-supply [type="submit"]').disabled = !!parameters.read_only;
     const sync = overview.snapshots.sync?.value;
     document.getElementById("wb-sync").disabled = ["queued", "running"].includes(sync?.state);
@@ -215,6 +244,7 @@
     select.replaceChildren(placeholder, ...supplies.items.filter(v => v.status === "open").map(v => { const option = make("option", `${v.attributes.source?.name || v.external_id} · ${v.external_id}`); option.value = v.id; return option; }));
     if (old && ![...select.options].some(v => v.value === previous)) select.append(old);
     select.value = previous;
+    updateSupplyPicker();
     if (currentAction && document.getElementById("wb-action-dialog").open) {
       const actionId = currentAction, action = await api(`${root}/actions/${encodeURIComponent(actionId)}`);
       if (version === revision && currentAction === actionId) renderAction(action);
@@ -239,8 +269,23 @@
   });
   document.getElementById("wb-sync").addEventListener("click", async event => { event.target.disabled = true; try { await api(`${base()}/sync`, "POST", {}); await refresh(); } catch (error) { showError(error); event.target.disabled = false; } });
   bindForm("wb-token", async fields => { const version = revision; await api(`${base()}/credentials`, "PUT", {token: fields.get("token")}); document.getElementById("wb-token").reset(); if (version === revision) await refresh(); });
-  bindForm("wb-create-supply", fields => prepare("supply_create", { name: fields.get("name") }));
-  document.getElementById("wb-add-orders").addEventListener("click", async () => { try { await prepare("supply_add", { supply_id: document.getElementById("wb-supply-select").value, order_ids: [...selected.keys()] }); selected.clear(); selectionCount(); } catch (error) { showError(error); } });
+  bindForm("wb-create-supply", async fields => {
+    const version = revision, ids = [...selected.keys()];
+    document.getElementById("packing-create-dialog").close();
+    const action = await runAction("supply_create", {name: fields.get("name")});
+    if (version !== revision) return;
+    await refresh();
+    let supply = supplyItems.find(v => v.external_id === action.result.supply_id);
+    if (!supply) { await new Promise(r=>setTimeout(r,700)); await refresh(); supply = supplyItems.find(v=>v.external_id === action.result.supply_id); }
+    if (!supply) throw new Error("Поставка создана. Обновите WB, чтобы добавить заказы.");
+    selectSupply(supply); updateSupplyPicker();
+    if (ids.length) { await runAction("supply_add", {supply_id:supply.id,order_ids:ids}); selected.clear(); await refresh(); }
+  });
+  document.getElementById("wb-add-orders").addEventListener("click", async event => {
+    event.target.disabled = true;
+    try { await runAction("supply_add", {supply_id:document.getElementById("wb-supply-select").value,order_ids:[...selected.keys()]}); selected.clear(); await refresh(); } catch (error) { showError(error); } finally { selectionCount(); }
+  });
+
 
   async function openLink(item) {
     const version = revision, values = await api(`${sellerApi}/connections`);
@@ -309,4 +354,94 @@
   document.querySelectorAll("#wb-tabs button").forEach(v => v.classList.toggle("secondary", v.dataset.kind !== kind));
   if (pageQuery.get("history") === "1") document.getElementById("wb-history").open = true;
   loadWarehouseFilter().then(poll).catch(error => { showError(error); poll(); });
+  function cleanSupplyName(value) { return value.replace(/ \[FBE [a-f0-9-]+\]$/, ""); }
+  function updateSupplyPicker() {
+    const select = document.getElementById("wb-supply-select"), supply = supplyItems.find(v=>v.id === select.value);
+    document.getElementById("packing-pick-supply").textContent = supply ? cleanSupplyName(supply.attributes.source?.name || supply.external_id) : "Выбрать поставку +";
+    document.getElementById("wb-add-orders").disabled = !selected.size || !select.value || !!parameters.read_only;
+  }
+  function packingResult(text, error=false) { const p=make("p",text,"packing-result"+(error?" error":""));document.getElementById("packing-results").replaceChildren(p); }
+  async function runAction(actionKind,payload) {
+    const version=revision, endpoint=base();
+    const action=await api(endpoint+"/actions","POST",{kind:actionKind,payload});
+    if(version!==revision)throw new Error("Аккаунт изменен. Действие осталось в истории, отправка не выполнена.");
+    await api(`${root}/actions/${action.id}/send`,"POST",{});
+    packingResult(`${actionNames[actionKind]}: выполняется…`);
+    for(let i=0;i<40;i++) {
+      await new Promise(r=>setTimeout(r,750));
+      const result=await api(`${root}/actions/${action.id}`);
+      if(version!==revision)throw new Error("Аккаунт изменен. Результат доступен в истории исходного аккаунта.");
+      if(result.state==="confirmed") {packingResult(`${actionNames[actionKind]}: подтверждено WB`);return result;}
+      if(["rejected","unknown","conflict","partial","cancelled"].includes(result.state)) {renderAction(result);document.getElementById("wb-action-dialog").showModal();throw new Error(result.result.reason || actionStates[result.state]);}
+    }
+    throw new Error("WB еще обрабатывает действие. Результат появится в истории; повторно отправлять не нужно.");
+  }
+  function bindPacking(id,fn) { document.getElementById(id).addEventListener("click",async event=>{event.currentTarget.disabled=true;try{await fn();}catch(e){showError(e);packingResult(e.message,true);}finally{event.target.disabled=false;selectionCount();updateSupplyPicker();}}); }
+  document.getElementById("wb-select-page").addEventListener("change",event=>{
+    for(const item of pageItems) if(["new","confirm"].includes(item.status)&&item.attributes.source?.deliveryType==="fbs") {if(event.target.checked)selected.set(item.id,item);else selected.delete(item.id);}
+    document.querySelectorAll(".order-card input[type=checkbox]").forEach(v=>v.checked=selected.has(v.closest(".order-card").dataset.orderId));selectionCount();updateSupplyPicker();
+  });
+  document.querySelectorAll("[data-order-status]").forEach(button=>button.addEventListener("click",async()=>{
+    kind=button.dataset.orderStatus==="supplies"?"supplies":"orders";status=kind==="orders"?button.dataset.orderStatus:"";stage="";offset=0;revision++;selected.clear();statusOptions();filterForm.elements.stage.value="";selectionCount();
+    document.querySelectorAll("#wb-tabs button").forEach(v=>v.classList.toggle("secondary",v.dataset.kind!==kind));
+    try{await refresh();}catch(e){showError(e);}
+  }));
+  bindPacking("packing-pick-supply",async()=>{
+    const candidates=supplyItems.filter(v=>v.status==="open");
+    document.getElementById("packing-supplies").replaceChildren(...candidates.map(supply=>{
+      const button=clickButton(cleanSupplyName(supply.attributes.source?.name||supply.external_id),()=>{selectSupply(supply);updateSupplyPicker();document.getElementById("packing-supply-dialog").close();});button.className="supply-choice";button.append(make("small",supply.external_id));return button;
+    }));
+    if(!candidates.length)document.getElementById("packing-supplies").append(make("p","Нет открытых поставок. Создайте новую для выбранных заказов."));
+    document.getElementById("packing-supply-dialog").showModal();
+  });
+  function newSupply() {
+    document.getElementById("packing-supply-dialog").close();
+    const warehouses=[...new Set([...selected.values()].map(v=>warehouseNames.get(String(v.warehouse_external_id))||"Склад"))];
+    if(warehouses.length>1)throw new Error("Выберите заказы одного склада. Для остальных создайте отдельную поставку.");
+    const now=new Date(), hour=now.getHours(), shift=hour<12?"Утро":hour<18?"День":"Вечер";
+    document.querySelector('#wb-create-supply [name="name"]').value=`${warehouses[0]||"WB"} · ${now.toLocaleDateString("ru-RU")} · ${shift} ${now.toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}`.slice(0,95);
+    document.getElementById("packing-create-dialog").showModal();
+  }
+  bindPacking("packing-new-supply",newSupply);bindPacking("packing-create-from-picker",newSupply);
+  bindPacking("packing-expiration",()=>{
+    const rows=[...selected.values()].map(item=>{
+      const row=make("section",undefined,"expiry-row");row.append(make("h3",`#${item.external_id} · ${item.packing?.title||item.attributes.source.article}`));
+      const batches=item.packing?.batches||[], options=make("div",undefined,"batch-options");
+      if(!batches.length) { const link=make("a","Добавить партию в ассортименте");link.href=`/sellers/${encodeURIComponent(sellerId)}/catalog`;row.append(link); }
+      for(const batch of batches) {
+        const label=make("label",undefined,"batch-option"), radio=make("input");radio.type="radio";radio.name=item.id;radio.value=batch.id;radio.required=true;
+        radio.disabled=!batch.expires_on||new Date(batch.expires_on+"T23:59:59")-Date.now()<30*86400000;radio.checked=!radio.disabled&&(batches.length===1||batch.id===item.packing?.expiration?.batch_id);
+        label.append(radio,make("span",`${batch.name} · годен до ${batch.expires_on||"дата не указана"}${radio.disabled?" · недоступна для WB":""}`));options.append(label);
+      }
+      row.append(options);return row;
+    });
+    document.getElementById("packing-expiry-items").replaceChildren(...rows);document.getElementById("packing-expiry-dialog").showModal();
+  });
+  bindForm("packing-expiry-form",async fields=>{
+    const items=[...selected.keys()].map(order_id=>({order_id,batch_id:fields.get(order_id)}));
+    if(items.some(v=>!v.batch_id))throw new Error("Выберите партию для каждого заказа. Заказы без партий можно убрать из выбора.");
+    const version=revision,result=await api(base()+"/packing/expiration","POST",{items});
+    if(version!==revision)return;document.getElementById("packing-expiry-dialog").close();showBulkResult(result);await refresh();
+  });
+  function showBulkResult(values) {
+    document.getElementById("packing-results").replaceChildren(...values.map(v=>{const item=selected.get(v.order_id);return make("p",`#${item?.external_id||v.order_id} · ${v.error||"В очереди. Ожидаем подтверждение WB"}`,"packing-result"+(v.error?" error":""));}));
+  }
+  bindPacking("packing-codes",async()=>{const version=revision,result=await api(base()+"/packing/codes","POST",{order_ids:[...selected.keys()]});if(version!==revision)return;showBulkResult(result);await refresh();});
+  async function printLabels(labelKind,supply_id=null) {
+    // Open synchronously so the browser does not block the print tab after fetch.
+    const tab=window.open("about:blank","_blank");if(tab)tab.opener=null;
+    try {const result=await api(base()+"/packing/print","POST",{kind:labelKind,order_ids:labelKind==="supply"?[]:[...selected.keys()],supply_id});const url=`/sellers/${encodeURIComponent(sellerId)}/printing/wb/${encodeURIComponent(result.id)}`;
+      if(tab)tab.location.href=url;else{const link=make("a","Открыть этикетки");link.href=url;link.target="_blank";link.rel="noopener";document.getElementById("packing-results").replaceChildren(link);} }
+    catch(e){if(tab)tab.close();throw e;}
+  }
+  bindPacking("packing-labels",()=>printLabels("orders"));bindPacking("packing-print-codes",()=>printLabels("codes"));
+  async function openDelivery(item) {
+    const version=revision, result=await api(`${base()}/supplies/${item.id}/details`);if(version!==revision)return;
+    deliverySupply=item;document.getElementById("packing-delivery-title").textContent=cleanSupplyName(item.attributes.source?.name||item.external_id);
+    const blockers=result.orders.filter(v=>v.status!=="confirm"||Object.values(v.metadata).some(m=>m.decision!=="filled"));
+    document.getElementById("packing-delivery-content").replaceChildren(make("p",`${result.orders.length} заказов · ${blockers.length?blockers.length+" требуют внимания":"метаданные подтверждены WB"}`),...result.orders.map(v=>{const missing=Object.entries(v.metadata).filter(([,m])=>m.decision!=="filled").map(([key])=>({expiration:"срок годности",sgtin:"КИЗы"})[key]||key);return make("div",`#${v.external_id} · ${v.cached?.attributes.source.article||"Товар"} · ${missing.length?"Проверить: "+missing.join(", "):orderStates[v.status]||v.status}`,"delivery-order"+(missing.length?" blocked":""));}));
+    const check=document.getElementById("packing-physical");check.checked=false;check.disabled=blockers.length>0||!result.orders.length;document.getElementById("packing-deliver").disabled=true;document.getElementById("packing-delivery-dialog").showModal();
+  }
+  document.getElementById("packing-physical").addEventListener("change",event=>document.getElementById("packing-deliver").disabled=!event.target.checked);
+  bindPacking("packing-deliver",async()=>{if(!document.getElementById("packing-physical").checked||!deliverySupply)return;const item=deliverySupply;document.getElementById("packing-delivery-dialog").close();await runAction("supply_deliver",{supply_id:item.id});await refresh();});
 })();

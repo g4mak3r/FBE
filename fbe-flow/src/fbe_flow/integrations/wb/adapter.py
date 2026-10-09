@@ -487,6 +487,22 @@ class WbAdapter:
         self.account(config)
         if config.read_only or token_claims(self.token(config))["read_only"]:
             raise InvalidInput("Токен WB разрешает только чтение")
+        if kind == "expiration":
+            from datetime import date, datetime, timedelta
+
+            order = int(body["order_external_id"])
+            if datetime.strptime(body["expiration"], "%d.%m.%Y").date() < date.today() + timedelta(
+                days=30
+            ):
+                raise InvalidInput("Остаточный срок годности меньше 30 дней")
+            if self.statuses(config, [order])[str(order)]["supplierStatus"] != "confirm":
+                raise Conflict("Срок годности можно передать только для задания на сборке")
+            meta = self.metas(config, [order])[str(order)].get("expiration")
+            if meta is None:
+                raise InvalidInput("WB не разрешает срок годности для этого задания")
+            if meta["value"] and meta["value"] != body["expiration"]:
+                raise Conflict("В WB уже указан другой срок: проверьте партию товара")
+            return
         if kind == "sgtin":
             order = int(body["order_external_id"])
             if self.statuses(config, [order])[str(order)]["supplierStatus"] != "confirm":
@@ -528,6 +544,15 @@ class WbAdapter:
                 return {"members": members, "metas": values}
 
     def send(self, config, kind, body):
+        if kind == "expiration":
+            self._call(
+                config,
+                "marketplace",
+                "PUT",
+                "/api/v3/orders/" + body["order_external_id"] + "/meta/expiration",
+                body={"expiration": body["expiration"]},
+            )
+            return {}
         if kind == "sgtin":
             self._call(
                 config,
@@ -580,6 +605,20 @@ class WbAdapter:
 
     def reconcile(self, config, kind, body, receipt):
         self.account(config)
+        if kind == "expiration":
+            meta = self.metas(config, [int(body["order_external_id"])])[
+                body["order_external_id"]
+            ].get("expiration")
+            if meta is None:
+                return {"state": "conflict", "reason": "expiration_unavailable"}
+            if meta["value"] and meta["value"] != body["expiration"]:
+                return {"state": "conflict", "reason": "different_expiration"}
+            if meta["value"] == body["expiration"] and meta["decision"] == "filled":
+                return {"state": "confirmed", "metadata": meta}
+            return {
+                "state": "pending" if receipt.get("acknowledged") else "unknown",
+                "metadata": meta,
+            }
         if kind == "sgtin":
             meta = self.metas(config, [int(body["order_external_id"])])[
                 body["order_external_id"]

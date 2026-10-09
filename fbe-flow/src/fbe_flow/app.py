@@ -175,6 +175,7 @@ def create_app(
         ) and request.url.path not in {"/docs", "/redoc", "/docs/oauth2-redirect"}:
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self'; style-src 'self'; "
+                "img-src 'self' data: https://*.wbbasket.ru https://*.wbstatic.net; "
                 "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
             )
         return response

@@ -3,7 +3,7 @@
 import json
 import sqlite3
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 from pydantic import Field, ValidationError
@@ -28,6 +28,11 @@ class CodeSelection(Contract):
     code_ids: list[Text] = Field(min_length=1, max_length=100)
 
 
+class ExpirationSelection(Contract):
+    order_id: Text
+    batch_id: Text
+
+
 class SupplyName(Contract):
     name: Text = Field(max_length=95)
 
@@ -42,6 +47,7 @@ class SupplySelection(SupplyTarget):
 
 PAYLOADS = {
     "sgtin": CodeSelection,
+    "expiration": ExpirationSelection,
     "supply_create": SupplyName,
     "supply_add": SupplySelection,
     "supply_deliver": SupplyTarget,
@@ -112,7 +118,18 @@ class Fulfillment:
                 ).fetchone()[0]
                 for kind in KINDS
             }
+        with self.db.connection() as conn:
+            stages = {
+                r[0]: r[1]
+                for r in conn.execute(
+                    "SELECT status,count(*) FROM orders WHERE seller_id=? AND connection_id=? "
+                    "AND json_extract(attributes_json,'$.source.deliveryType')='fbs' "
+                    "GROUP BY status",
+                    (seller, connection),
+                )
+            }
         return {
+            "stages": stages,
             "parameters": {
                 "tin": value["config"]["tin"],
                 "account_id": value["external_account_id"],
@@ -178,6 +195,9 @@ class Fulfillment:
                         (seller, item["id"]),
                     ).fetchall()
                     item["marking"] = [dict(r) for r in assignments]
+                from fbe_flow.modules.packing import enrich_orders
+
+                enrich_orders(conn, seller, connection, items)
         return {"items": items, "total": total, "offset": offset, "limit": limit}
 
     def start_sync(self, seller, connection):
@@ -482,6 +502,27 @@ class Fulfillment:
                 "sgtins": [v["full_code"] for v in codes],
                 "cis": [v["code"] for v in codes],
                 "link_id": link["id"],
+            }
+            targets = ["order:" + order["external_id"]]
+        elif kind == "expiration":
+            from fbe_flow.modules.packing import order_batch
+
+            order = records.get(seller, "orders", payload["order_id"])
+            if order["connection_id"] != connection or order["status"] != "confirm":
+                raise InvalidInput("Срок годности доступен для заданий этого аккаунта на сборке")
+            if order["attributes"]["source"].get("deliveryType") != "fbs":
+                raise InvalidInput("Выберите задание FBS")
+            with self.db.connection() as conn:
+                batch = order_batch(conn, seller, connection, order, payload["batch_id"])
+            expires = date.fromisoformat(batch["expires_on"])
+            if expires < date.today() + timedelta(days=30):
+                raise InvalidInput("WB требует не менее 30 дней до окончания срока годности")
+            body = {
+                "order_id": order["id"],
+                "order_external_id": order["external_id"],
+                "batch_id": batch["id"],
+                "batch_name": batch["name"],
+                "expiration": expires.strftime("%d.%m.%Y"),
             }
             targets = ["order:" + order["external_id"]]
         elif kind == "supply_create":

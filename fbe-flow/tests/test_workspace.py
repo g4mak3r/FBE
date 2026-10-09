@@ -198,7 +198,7 @@ def test_consistent_backup_and_test_label_have_no_marking_side_effects(ui):
     with sqlite3.connect(state.workspace.backup_path(name)) as conn:
         assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert {r[0] for r in conn.execute("SELECT id FROM sellers")} == {seller, other}
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
     assert client.get(root + "/backup/" + name).content.startswith(b"SQLite format 3")
     assert client.get(root + "/backup/flow-20260101T010101-00000000.sqlite3").status_code == 404
     assert state.operations.list(seller) == before

@@ -6,6 +6,7 @@
   <title>{{ {'overview':'Рабочее пространство','catalog':'Ассортимент','sales':'Продажи','marking':'Честный Знак','settings':'Настройки'}.get(page, 'FBE Flow') }} · FBE Flow</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/shell.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='/workspace.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='/packing.css') }}">
   <script defer src="{{ url_for('static', path='/shell.js') }}"></script>
   <script defer src="{{ url_for('static', path='/interface.js') }}"></script>
   {% if page == 'overview' %}<script defer src="{{ url_for('static', path='/workspace.js') }}"></script>{% endif %}

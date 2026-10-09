@@ -59,9 +59,21 @@
     if (focusedSource) [...root.querySelectorAll("[data-source-key]")].find(item => item.dataset.sourceKey === focusedSource)?.querySelector(active.tagName === "BUTTON" ? "button" : "summary")?.focus({preventScroll: true});
     document.getElementById("workspace-updated").textContent = "На " + new Date(data.generated_at).toLocaleTimeString("ru-RU", {hour: "2-digit", minute: "2-digit"});
   }
+  async function recentOrders() {
+    const connections = (await api(sellerApi + "/connections")).filter(v=>v.adapter_key === "wb");
+    const results = await Promise.all(connections.map(async connection=>({connection,page:await api(`${sellerApi}/wb/${encodeURIComponent(connection.id)}/records/orders?status=new&limit=4`)})));
+    const entries = results.flatMap(({connection,page})=>page.items.map(item=>({connection,item}))).slice(0,8);
+    document.getElementById("workspace-orders").hidden = !entries.length;
+    document.getElementById("workspace-recent-orders").replaceChildren(...entries.map(({connection,item})=>{
+      const link=node("a"),thumb=node("div","▧","product-thumb"),copy=node("div");
+      link.href=`/sellers/${encodeURIComponent(sellerId)}/sales?channel=wb&connection=${encodeURIComponent(connection.id)}&status=new`;
+      if(item.packing?.image){const img=node("img");img.src=item.packing.image;img.alt="";img.loading="lazy";img.referrerPolicy="no-referrer";thumb.replaceChildren(img);}
+      copy.append(node("strong",item.packing?.title||item.attributes.source?.article||"Товар"),node("small",`#${item.external_id} · ${connection.name}`));link.append(thumb,copy);return link;
+    }));
+  }
   async function load() {
     if (refreshing) return; refreshing = true;
-    try { data = await api(sellerApi + "/workspace"); render(); }
+    try { data = await api(sellerApi + "/workspace"); render(); await recentOrders(); }
     catch (error) { showError(error); }
     finally { refreshing = false; }
   }

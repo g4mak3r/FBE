@@ -589,7 +589,7 @@ def test_stage4_migration_preserves_wb_reservations_full_codes_and_running_jobs(
         conn.execute("UPDATE operations SET status='running' WHERE id=?", (job["id"],))
     state.database.initialize()
     with state.database.connection() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
         rows = conn.execute("SELECT code,origin,action_id FROM code_reservations").fetchall()
         assert {r[0] for r in rows} == set(action["body"]["cis"])
@@ -601,7 +601,7 @@ def test_stage4_migration_preserves_wb_reservations_full_codes_and_running_jobs(
     assert (
         state.fulfillment.action(seller, action["id"])["body"]["sgtins"] == action["body"]["sgtins"]
     )
-    backup = state.database.path.parent / "flow.before-v7.sqlite3"
+    backup = state.database.path.parent / "flow.before-v8.sqlite3"
     with sqlite3.connect(backup) as conn:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
         assert conn.execute("SELECT count(*) FROM wb_code_assignments").fetchone()[0] == 2

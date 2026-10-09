@@ -27,3 +27,4 @@ uvicorn==0.54.0
 defusedxml==0.7.1
 et_xmlfile==2.0.0
 openpyxl==3.1.5
+zxing-cpp==3.1.1

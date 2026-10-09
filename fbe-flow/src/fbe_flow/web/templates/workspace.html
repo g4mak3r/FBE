@@ -1,3 +1,4 @@
+<section id="workspace-orders" hidden><div class="recent-orders-heading"><h2>Новые заказы WB</h2><a href="/sellers/{{ seller.id }}/sales?channel=wb&amp;status=new">Перейти к сборке →</a></div><div id="workspace-recent-orders" class="recent-order-strip"></div></section>
 <div class="workspace-toolbar"><p id="workspace-updated" class="muted"></p><div class="actions"><button id="workspace-refresh" type="button" class="secondary" aria-label="Обновить сводку">Обновить</button><button id="workspace-configure" type="button" class="secondary">Виджеты</button></div></div>
 {% if not connections %}<section class="panel empty"><h2>Подключите первую систему</h2><p>Здесь появятся задачи по заказам и маркировке.</p><a class="button-link" href="/sellers/{{ seller.id }}/settings?tab=integrations">Перейти к подключениям</a></section>{% endif %}
 <div id="workspace-widgets" class="workspace-grid" aria-live="polite"><p class="muted">Загружаем задачи…</p></div>

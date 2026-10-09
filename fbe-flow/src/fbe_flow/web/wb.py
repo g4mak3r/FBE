@@ -31,7 +31,9 @@ class LinkInput(Contract):
 
 
 class PrepareInput(Contract):
-    kind: Literal["sgtin", "supply_create", "supply_add", "supply_deliver", "supply_delete"]
+    kind: Literal[
+        "sgtin", "supply_create", "supply_add", "supply_deliver", "supply_delete", "expiration"
+    ]
     payload: dict[str, JsonValue]
 
 
@@ -208,3 +210,69 @@ def cancel(request: Request, seller_id: str, action_id: str):
 @router.post("/actions/{action_id}/retry-codes", status_code=202)
 def retry_codes(request: Request, seller_id: str, action_id: str):
     return request.app.state.fulfillment.retry_codes(seller_id, action_id)
+
+
+class PackingOrders(Contract):
+    order_ids: list[Text] = Field(min_length=1, max_length=100)
+
+
+class ExpiryItem(Contract):
+    order_id: Text
+    batch_id: Text
+
+
+class PackingExpiry(Contract):
+    items: list[ExpiryItem] = Field(min_length=1, max_length=100)
+
+
+class PrintInput(Contract):
+    kind: Literal["orders", "codes", "supply"]
+    order_ids: list[Text] = Field(default_factory=list, max_length=100)
+    supply_id: Text | None = None
+
+
+@router.post("/{connection_id}/packing/expiration")
+def packing_expiry(request: Request, seller_id: str, connection_id: str, body: PackingExpiry):
+    from fbe_flow.modules.packing import bulk_expiration
+
+    return bulk_expiration(
+        request.app.state.fulfillment,
+        seller_id,
+        connection_id,
+        [v.model_dump() for v in body.items],
+    )
+
+
+@router.post("/{connection_id}/packing/codes")
+def packing_codes(request: Request, seller_id: str, connection_id: str, body: PackingOrders):
+    from fbe_flow.modules.packing import bulk_codes
+
+    return bulk_codes(request.app.state.fulfillment, seller_id, connection_id, body.order_ids)
+
+
+@router.post("/{connection_id}/packing/print", status_code=201)
+def packing_print(request: Request, seller_id: str, connection_id: str, body: PrintInput):
+    from fbe_flow.modules.packing import create_print_job
+
+    return create_print_job(
+        request.app.state.fulfillment,
+        seller_id,
+        connection_id,
+        body.kind,
+        body.order_ids,
+        body.supply_id,
+    )
+
+
+@router.post("/print/{job_id}/confirm")
+def confirm_print(request: Request, seller_id: str, job_id: str):
+    from fbe_flow.modules.packing import print_job
+
+    print_job(request.app.state.fulfillment, seller_id, job_id)
+    with request.app.state.database.connection() as conn:
+        conn.execute(
+            "UPDATE wb_print_jobs SET confirmed_at=COALESCE(confirmed_at,"
+            "strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE seller_id=? AND id=?",
+            (seller_id, job_id),
+        )
+    return {"confirmed": True}
